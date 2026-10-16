@@ -7,7 +7,7 @@ for Mammoth Charm LLC, builds an RFC 5545 compliant iCalendar (.ics) feed,
 and publishes it to an S3/R2 bucket or updates Google Calendar directly.
 
 Author: Mammoth Charm LLC Operations
-Version: 1.5.0 (Removed redundant DESCRIPTION property)
+Version: 1.6.0 (Strictly SUMMARY only, no DESCRIPTION)
 """
 
 import os
@@ -98,10 +98,6 @@ class PriceLabsExtractor:
             raise RuntimeError(f"PriceLabs API request failed: {response.status_code}")
 
     def _determine_availability(self, r: Dict[str, Any]) -> bool:
-        """
-        Inspects PriceLabs fields (occupancy, booking_status, status, blocked, available)
-        to identify whether a date is open or unavailable.
-        """
         if "occupancy" in r and r["occupancy"] is not None:
             try:
                 occ = float(r["occupancy"])
@@ -221,4 +217,48 @@ class ICSCalendarBuilder:
             status_str = "Available" if is_avail else "Unavailable"
 
             # Primary title displayed on the Google Calendar grid
-            event_title
+            event_title = f"${price} {status_str} {min_stay} Night Min"
+            uid = f"pricelabs-{dtstart}@mammothcharm.com"
+
+            lines.append("BEGIN:VEVENT")
+            lines.append(f"UID:{uid}")
+            lines.append(f"DTSTAMP:{now_utc}")
+            lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
+            lines.append(f"DTEND;VALUE=DATE:{dtend}")
+            
+            # Keep SUMMARY for the Event Title. Do not add DESCRIPTION.
+            lines.append(f"SUMMARY:{event_title}")
+            
+            lines.append("STATUS:CONFIRMED")
+            lines.append("TRANSP:TRANSPARENT")
+            lines.append("END:VEVENT")
+            count += 1
+
+        lines.append("END:VCALENDAR")
+        logger.info(f"Generated {count} VEVENT entries for iCalendar feed.")
+        return "\r\n".join(lines) + "\r\n"
+
+# ---------------------------------------------------------------------------
+# Main Execution Pipeline
+# ---------------------------------------------------------------------------
+def main():
+    logger.info("=== Starting PriceLabs Calendar Sync ===")
+
+    extractor = PriceLabsExtractor(
+        api_key=PRICELABS_API_KEY,
+        listing_id=PRICELABS_LISTING_ID,
+        pms=PRICELABS_PMS_NAME
+    )
+    records = extractor.fetch_pricing()
+
+    builder = ICSCalendarBuilder(calendar_name="PriceLabs")
+    ics_content = builder.build_ics(records)
+
+    with open(OUTPUT_ICS_FILENAME, "w", encoding="utf-8") as f:
+        f.write(ics_content)
+    logger.info(f"Local calendar file written to: {OUTPUT_ICS_FILENAME}")
+
+    logger.info("=== PriceLabs Calendar Sync Finished Successfully ===")
+
+if __name__ == "__main__":
+    main()
