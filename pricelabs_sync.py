@@ -7,7 +7,7 @@ for Mammoth Charm LLC, builds an RFC 5545 compliant iCalendar (.ics) feed,
 and publishes it to an S3/R2 bucket or updates Google Calendar directly.
 
 Author: Mammoth Charm LLC Operations
-Version: 1.2.0 (Date window filtering and robust availability detection)
+Version: 1.4.0 (Updated event summary/description format)
 """
 
 import os
@@ -148,14 +148,15 @@ class PriceLabsExtractor:
         return True
 
     def _normalize_records(self, raw_records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        # Compute today's date in Pacific Time
         if ZoneInfo:
             today = datetime.now(ZoneInfo(TIMEZONE_STR)).date()
         else:
             today = (datetime.utcnow() - timedelta(hours=7)).date()
 
-        one_year_ahead = today + timedelta(days=365)
-        logger.info(f"Filtering calendar window: {today} to {one_year_ahead} ({TIMEZONE_STR})")
+        # Start from tomorrow and run for 365 days
+        start_date = today + timedelta(days=1)
+        end_date = start_date + timedelta(days=365)
+        logger.info(f"Filtering calendar window: {start_date} to {end_date} ({TIMEZONE_STR})")
 
         normalized = []
         for r in raw_records:
@@ -168,8 +169,7 @@ class PriceLabsExtractor:
             except ValueError:
                 continue
 
-            # Exclude past dates and dates beyond 365 days
-            if d_obj < today or d_obj > one_year_ahead:
+            if d_obj < start_date or d_obj > end_date:
                 continue
 
             is_avail = self._determine_availability(r)
@@ -178,23 +178,17 @@ class PriceLabsExtractor:
                 "date": d_str,
                 "price": str(r.get("price") or r.get("final_price") or r.get("recommended_price", "0")),
                 "min_stay": str(r.get("min_stay", "2")),
-                "available": is_avail,
-                "raw_sample": r if d_obj == today else None
+                "available": is_avail
             })
 
-        # Log today's raw fields in the Action console for verification
-        today_match = [x for x in normalized if x["date"] == str(today)]
-        if today_match and today_match[0]["raw_sample"]:
-            logger.info(f"API fields returned for today ({today}): {json.dumps(today_match[0]['raw_sample'])}")
-
-        logger.info(f"Retained {len(normalized)} records within the 1-year window.")
+        logger.info(f"Retained {len(normalized)} records starting from {start_date}.")
         return normalized
 
 # ---------------------------------------------------------------------------
 # 2. RFC 5545 iCalendar (.ics) Builder
 # ---------------------------------------------------------------------------
 class ICSCalendarBuilder:
-    """Builds an RFC 5545 compliant .ics calendar file."""
+    """Builds an RFC 5545 compliant .ics calendar feed."""
 
     def __init__(self, calendar_name: str = "PriceLabs", timezone: str = TIMEZONE_STR):
         self.calendar_name = calendar_name
@@ -231,8 +225,8 @@ class ICSCalendarBuilder:
             is_avail = item.get("available", True)
             status_str = "Available" if is_avail else "Unavailable"
 
-            summary = f"${price} / {status_str} / {min_stay} N"
-            description = f"{status_str} / ${price} per night / {min_stay} night minimum stay"
+            # Clean output format: $300 Available 2 Night Min
+            event_text = f"${price} {status_str} {min_stay} Night Min"
             uid = f"pricelabs-{dtstart}@mammothcharm.com"
 
             lines.append("BEGIN:VEVENT")
@@ -240,8 +234,8 @@ class ICSCalendarBuilder:
             lines.append(f"DTSTAMP:{now_utc}")
             lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
             lines.append(f"DTEND;VALUE=DATE:{dtend}")
-            lines.append(f"SUMMARY:{summary}")
-            lines.append(f"DESCRIPTION:{description}")
+            lines.append(f"SUMMARY:{event_text}")
+            lines.append(f"DESCRIPTION:{event_text}")
             lines.append("STATUS:CONFIRMED")
             lines.append("TRANSP:TRANSPARENT")
             lines.append("END:VEVENT")
