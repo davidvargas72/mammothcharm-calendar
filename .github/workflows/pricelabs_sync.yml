@@ -1,0 +1,46 @@
+name: PriceLabs Daily Pricing Sync
+
+on:
+  schedule:
+    # Runs daily at 14:00 UTC (7:00 AM PDT / 6:00 AM PST)
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-pricing:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests boto3
+
+      - name: Run PriceLabs Calendar Sync
+        env:
+          PRICELABS_API_KEY: ${{ secrets.PRICELABS_API_KEY }}
+          PRICELABS_LISTING_ID: ${{ secrets.PRICELABS_LISTING_ID }}
+          PRICELABS_PMS_NAME: ${{ secrets.PRICELABS_PMS_NAME }}
+          OUTPUT_ICS_FILENAME: 'pricelabs_pricing.ics'
+        run: |
+          python pricelabs_sync.py
+
+      - name: Commit and push updated calendar
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add pricelabs_pricing.ics
+          # Only commit if the file actually changed
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Automated update of pricelabs_pricing.ics" && git push)
