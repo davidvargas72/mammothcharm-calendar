@@ -3,11 +3,11 @@
 PriceLabs Dynamic Pricing Calendar Automation
 =============================================
 Automates the daily extraction of PriceLabs dynamic pricing and minimum stay rules
-for Mammoth Charm LLC, builds an RFC 5545 compliant iCalendar (.ics) feed,
-and publishes it to an S3/R2 bucket or updates Google Calendar directly.
+for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
+(Standard and 25% Discounted), and publishes them for Google Calendar consumption.
 
 Author: Mammoth Charm LLC Operations
-Version: 1.6.0 (Strictly SUMMARY only, no DESCRIPTION)
+Version: 2.0.0 (Dual-feed generation: Standard & Discounted)
 """
 
 import os
@@ -15,7 +15,7 @@ import sys
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 try:
     from zoneinfo import ZoneInfo
@@ -38,8 +38,11 @@ logger = logging.getLogger("pricelabs_sync")
 PRICELABS_API_KEY = os.getenv("PRICELABS_API_KEY", "")
 PRICELABS_LISTING_ID = os.getenv("PRICELABS_LISTING_ID", "1089448089629471493")
 PRICELABS_PMS_NAME = os.getenv("PRICELABS_PMS_NAME", "airbnb")
-OUTPUT_ICS_FILENAME = os.getenv("OUTPUT_ICS_FILENAME", "pricelabs_pricing.ics")
+
+OUTPUT_STANDARD_FILENAME = os.getenv("OUTPUT_ICS_FILENAME", "pricelabs_pricing.ics")
+OUTPUT_DISCOUNTED_FILENAME = os.getenv("OUTPUT_DISCOUNTED_ICS_FILENAME", "pricelabs_discounted.ics")
 TIMEZONE_STR = "America/Los_Angeles"
+DISCOUNT_MULTIPLIER = 0.75  # 25% reduction
 
 # ---------------------------------------------------------------------------
 # 1. PriceLabs Data Extractor
@@ -54,7 +57,7 @@ class PriceLabsExtractor:
         self.listing_id = listing_id
         self.pms = pms
 
-    def fetch_pricing(self) -> List[Dict[str, Any]]:
+    def fetch_pricing(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         if not self.api_key:
             logger.warning("No PRICELABS_API_KEY set.")
             raise ValueError("Missing PriceLabs credentials.")
@@ -139,7 +142,7 @@ class PriceLabsExtractor:
 
         return True
 
-    def _normalize_records(self, raw_records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _normalize_records(self, raw_records: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         if ZoneInfo:
             today = datetime.now(ZoneInfo(TIMEZONE_STR)).date()
         else:
@@ -149,7 +152,9 @@ class PriceLabsExtractor:
         end_date = start_date + timedelta(days=365)
         logger.info(f"Filtering calendar window: {start_date} to {end_date} ({TIMEZONE_STR})")
 
-        normalized = []
+        standard_records = []
+        discounted_records = []
+
         for r in raw_records:
             d_str = r.get("date")
             if not d_str:
@@ -165,15 +170,33 @@ class PriceLabsExtractor:
 
             is_avail = self._determine_availability(r)
 
-            normalized.append({
+            raw_price = r.get("price") or r.get("final_price") or r.get("recommended_price") or 0
+            try:
+                base_price = float(raw_price)
+                std_price = round(base_price)
+                disc_price = round(base_price * DISCOUNT_MULTIPLIER)
+            except (ValueError, TypeError):
+                std_price = 0
+                disc_price = 0
+
+            min_stay = str(r.get("min_stay", "2"))
+
+            standard_records.append({
                 "date": d_str,
-                "price": str(r.get("price") or r.get("final_price") or r.get("recommended_price", "0")),
-                "min_stay": str(r.get("min_stay", "2")),
+                "price": str(std_price),
+                "min_stay": min_stay,
                 "available": is_avail
             })
 
-        logger.info(f"Retained {len(normalized)} records starting from {start_date}.")
-        return normalized
+            discounted_records.append({
+                "date": d_str,
+                "price": str(disc_price),
+                "min_stay": min_stay,
+                "available": is_avail
+            })
+
+        logger.info(f"Retained {len(standard_records)} dates starting from {start_date}.")
+        return standard_records, discounted_records
 
 # ---------------------------------------------------------------------------
 # 2. RFC 5545 iCalendar (.ics) Builder
@@ -181,11 +204,11 @@ class PriceLabsExtractor:
 class ICSCalendarBuilder:
     """Builds an RFC 5545 compliant .ics calendar feed."""
 
-    def __init__(self, calendar_name: str = "PriceLabs", timezone: str = TIMEZONE_STR):
+    def __init__(self, calendar_name: str, timezone: str = TIMEZONE_STR):
         self.calendar_name = calendar_name
         self.timezone = timezone
 
-    def build_ics(self, pricing_records: List[Dict[str, Any]]) -> str:
+    def build_ics(self, pricing_records: List[Dict[str, Any]], uid_prefix: str = "pricelabs") -> str:
         now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         lines = [
             "BEGIN:VCALENDAR",
@@ -216,26 +239,22 @@ class ICSCalendarBuilder:
             is_avail = item.get("available", True)
             status_str = "Available" if is_avail else "Unavailable"
 
-            # Primary title displayed on the Google Calendar grid
             event_title = f"${price} {status_str} {min_stay} Night Min"
-            uid = f"pricelabs-{dtstart}@mammothcharm.com"
+            uid = f"{uid_prefix}-{dtstart}@mammothcharm.com"
 
             lines.append("BEGIN:VEVENT")
             lines.append(f"UID:{uid}")
             lines.append(f"DTSTAMP:{now_utc}")
             lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
             lines.append(f"DTEND;VALUE=DATE:{dtend}")
-            
-            # Keep SUMMARY for the Event Title. Do not add DESCRIPTION.
             lines.append(f"SUMMARY:{event_title}")
-            
             lines.append("STATUS:CONFIRMED")
             lines.append("TRANSP:TRANSPARENT")
             lines.append("END:VEVENT")
             count += 1
 
         lines.append("END:VCALENDAR")
-        logger.info(f"Generated {count} VEVENT entries for iCalendar feed.")
+        logger.info(f"Generated {count} VEVENT entries for '{self.calendar_name}'.")
         return "\r\n".join(lines) + "\r\n"
 
 # ---------------------------------------------------------------------------
@@ -249,14 +268,21 @@ def main():
         listing_id=PRICELABS_LISTING_ID,
         pms=PRICELABS_PMS_NAME
     )
-    records = extractor.fetch_pricing()
+    standard_records, discounted_records = extractor.fetch_pricing()
 
-    builder = ICSCalendarBuilder(calendar_name="PriceLabs")
-    ics_content = builder.build_ics(records)
+    # 1. Standard Calendar Feed
+    std_builder = ICSCalendarBuilder(calendar_name="PriceLabs")
+    std_ics = std_builder.build_ics(standard_records, uid_prefix="pricelabs-std")
+    with open(OUTPUT_STANDARD_FILENAME, "w", encoding="utf-8") as f:
+        f.write(std_ics)
+    logger.info(f"Standard calendar written to: {OUTPUT_STANDARD_FILENAME}")
 
-    with open(OUTPUT_ICS_FILENAME, "w", encoding="utf-8") as f:
-        f.write(ics_content)
-    logger.info(f"Local calendar file written to: {OUTPUT_ICS_FILENAME}")
+    # 2. Discounted Calendar Feed (-25%)
+    disc_builder = ICSCalendarBuilder(calendar_name="PriceLabs Discounted")
+    disc_ics = disc_builder.build_ics(discounted_records, uid_prefix="pricelabs-disc")
+    with open(OUTPUT_DISCOUNTED_FILENAME, "w", encoding="utf-8") as f:
+        f.write(disc_ics)
+    logger.info(f"Discounted calendar written to: {OUTPUT_DISCOUNTED_FILENAME}")
 
     logger.info("=== PriceLabs Calendar Sync Finished Successfully ===")
 
