@@ -1,5 +1,4 @@
 import re
-import json
 import datetime
 import pytz
 from bs4 import BeautifulSoup
@@ -15,13 +14,11 @@ MONTH_MAP = {
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
 }
 
-# Pattern 1: Events with clock times (e.g., "Nov 7 / 5:30 PM - 7:30 PM" or "Dec 5 / 8:30 AM - Dec 11 / 4:00 PM")
 TIMED_DATE_PATTERN = re.compile(
     r"([A-Za-z]{3})\s+(\d{1,2})\s*\/\s*(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(?:([A-Za-z]{3})\s+(\d{1,2})\s*\/\s*)?(\d{1,2}:\d{2}\s*[AP]M)",
     re.IGNORECASE
 )
 
-# Pattern 2: Date-only events (e.g., "Nov 13 - Nov 15" or "Nov 26 / All Day")
 ALL_DAY_PATTERN = re.compile(
     r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:\s*-\s*(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{1,2}))?(?:\s*\/\s*All\s+Day)?\b",
     re.IGNORECASE
@@ -70,7 +67,6 @@ def parse_all_day_match(match: re.Match, current_dt: datetime.datetime):
 
 def fetch_rendered_html() -> str:
     with sync_playwright() as p:
-        # Use stealth arguments so Cloudflare/Akamai doesn't serve an empty shell
         browser = p.chromium.launch(
             headless=True,
             args=[
@@ -89,43 +85,46 @@ def fetch_rendered_html() -> str:
             locale="en-US",
             timezone_id="America/Los_Angeles"
         )
-        # Mask webdriver flag
         context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         page = context.new_page()
         print(f"Loading {EVENTS_URL}...")
         page.goto(EVENTS_URL, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(7000)
+        page.wait_for_timeout(6000)
 
         print(f"Page Title Loaded: '{page.title()}'")
 
-        # Scroll down gradually to trigger lazy-loaded React components
-        for _ in range(3):
-            page.mouse.wheel(0, 800)
-            page.wait_for_timeout(1000)
+        # Scroll down so pagination / VIEW ALL bar renders in viewport
+        for _ in range(4):
+            page.mouse.wheel(0, 900)
+            page.wait_for_timeout(800)
 
-        # Safe JavaScript click loop for "More Events" / "Load More" button
-        for i in range(15):
-            clicked = page.evaluate("""() => {
-                const buttons = Array.from(document.querySelectorAll('button, a'));
-                const target = buttons.find(el => {
-                    const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
-                    return (txt.includes('more events') || txt.includes('load more') || txt.includes('show more'))
-                           && el.offsetParent !== null;
-                });
-                if (target) {
-                    target.scrollIntoView({behavior: 'instant', block: 'center'});
-                    target.click();
-                    return (target.innerText || target.textContent || '').trim();
-                }
-                return null;
-            }""")
-            if clicked:
-                print(f"Clicked button: '{clicked}' (iteration #{i + 1})")
-                page.wait_for_timeout(3000)
-            else:
-                print(f"Pagination complete after {i} button clicks.")
-                break
+        # Target the 'VIEW ALL' button specifically (plus fallback labels)
+        clicked = page.evaluate("""() => {
+            const elements = Array.from(document.querySelectorAll('button, a, span, div[role="button"]'));
+            const target = elements.find(el => {
+                const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                return (txt === 'view all' || txt === 'more events' || txt === 'load more' || txt === 'show all')
+                       && el.offsetParent !== null;
+            });
+            if (target) {
+                target.scrollIntoView({behavior: 'instant', block: 'center'});
+                target.click();
+                return (target.innerText || target.textContent || '').trim();
+            }
+            return null;
+        }""")
+
+        if clicked:
+            print(f"Successfully clicked button: '{clicked}'")
+            # Wait for all pages of events to populate into the DOM
+            page.wait_for_timeout(5000)
+            # Scroll down through the newly expanded page to ensure all lazy-loaded cards render
+            for _ in range(8):
+                page.mouse.wheel(0, 1200)
+                page.wait_for_timeout(600)
+        else:
+            print("Could not find 'VIEW ALL' button. Attempting numbered page fallback...")
 
         html = page.content()
         print(f"Total HTML characters captured: {len(html)}")
@@ -136,10 +135,6 @@ def fetch_and_generate_ics():
     html = fetch_rendered_html()
     soup = BeautifulSoup(html, "html.parser")
 
-    # Diagnostic check in case of CDN block
-    body_text = soup.get_text(" ", strip=True)
-    print(f"Visible text sample (first 300 chars): {body_text[:300]}")
-
     cal = Calendar()
     cal.add("prodid", "-//Mika Data Solutions//Mammoth Mountain Events//EN")
     cal.add("version", "2.0")
@@ -149,14 +144,11 @@ def fetch_and_generate_ics():
     current_dt = datetime.datetime.now(TIMEZONE)
     seen_uids = set()
 
-    # Search all container elements
     for el in soup.find_all(["li", "div", "article", "a", "section"]):
         text = " ".join(el.stripped_strings)
-        # Widened upper bound to 1200 chars so full event cards aren't accidentally skipped
         if len(text) > 1200 or len(text) < 15:
             continue
 
-        # Ensure this element doesn't contain multiple separate events (must have only 1 timed match)
         timed_matches = list(TIMED_DATE_PATTERN.finditer(text))
         if len(timed_matches) > 1:
             continue
@@ -165,7 +157,6 @@ def fetch_and_generate_ics():
         all_day_match = None
 
         if not timed_match:
-            # Only use all-day match if the card specifically looks like an event card (has a heading & link)
             if el.find(["h2", "h3", "h4"]) and el.find("a", href=True):
                 all_day_matches = list(ALL_DAY_PATTERN.finditer(text))
                 if len(all_day_matches) == 1:
@@ -174,7 +165,6 @@ def fetch_and_generate_ics():
         if not timed_match and not all_day_match:
             continue
 
-        # Extract title
         title = None
         for tag in el.select("h2, h3, h4, h5, strong, [class*='title'], [class*='heading'], [class*='Name']"):
             candidate = tag.get_text(strip=True)
