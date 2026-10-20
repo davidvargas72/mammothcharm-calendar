@@ -3,4 +3,172 @@ VERSION:2.0
 PRODID:-//Mika Data Solutions//Mammoth Mountain Events//EN
 X-WR-CALNAME:Mammoth Mountain Events
 X-WR-TIMEZONE:America/Los_Angeles
+BEGIN:VEVENT
+SUMMARY:Mammoth Wedding Expo
+DTSTART;VALUE=DATE:20261107
+DTEND;VALUE=DATE:20261108
+UID:mammothweddingexpo-20261107@mikadatasolutions.com
+DESCRIPTION:Event Hours: 5:30 PM - 7:30 PM\n\nDetails: Nov 7 Sat Mammoth W
+ edding Expo Nov 7 / 5:30 PM - 7:30 PM Start planning your dream mountain w
+ edding with an evening of food\, music\, samples\, inspiration\, and a cha
+ nce to meet the Mammoth Mountain Weddings team and local vendors. Wedding 
+ Expo\n\nEvent Link: https://www.mammothmountain.com/things-to-do/events/we
+ dding-expo
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/wedding-expo
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:26/27 Opening Day
+DTSTART;VALUE=DATE:20261113
+DTEND;VALUE=DATE:20261114
+UID:2627openingday-20261113@mikadatasolutions.com
+DESCRIPTION:Event Hours: 8:30 AM - 4:00 PM\n\nDetails: Nov 13 Fri 26/27 Op
+ ening Day Nov 13 / 8:30 AM - 4:00 PM Kick off the 26/27 winter season with
+  us. Take some turns and celebrate winter with good times and good friends
+  at Mammoth Mountain. Opening Day\n\nEvent Link: https://www.mammothmounta
+ in.com/things-to-do/events/opening-day
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/opening-day
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Full Moon Snowshoe Tour
+DTSTART;VALUE=DATE:20261121
+DTEND;VALUE=DATE:20261122
+UID:fullmoonsnowshoetour-20261121@mikadatasolutions.com
+DESCRIPTION:Event Hours: 6:15 PM - 8:00 PM\n\nDetails: Nov 21 Sat Full Moo
+ n Snowshoe Tour Nov 21 / 6:15 PM - 8:00 PM Enjoy a guided snowshoe tour th
+ rough a moonlit winter wonderland at Tamarack Cross-Country Ski Center. Fu
+ ll Moon Tour\n\nEvent Link: https://www.mammothmountain.com/things-to-do/e
+ vents/tamarack-full-moon-snowshoe-tours
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/tamarack-full-moon
+ -snowshoe-tours
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Full Moon Snowshoe Tour
+DTSTART;VALUE=DATE:20261122
+DTEND;VALUE=DATE:20261123
+UID:fullmoonsnowshoetour-20261122@mikadatasolutions.com
+DESCRIPTION:Event Hours: 6:15 PM - 8:00 PM\n\nDetails: Nov 22 Sun Full Moo
+ n Snowshoe Tour Nov 22 / 6:15 PM - 8:00 PM Enjoy a guided snowshoe tour th
+ rough a moonlit winter wonderland at Tamarack Cross-Country Ski Center. Fu
+ ll Moon Tour\n\nEvent Link: https://www.mammothmountain.com/things-to-do/e
+ vents/tamarack-full-moon-snowshoe-tours
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/tamarack-full-moon
+ -snowshoe-tours
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Full Moon Snowshoe Tour
+DTSTART;VALUE=DATE:20261123
+DTEND;VALUE=DATE:20261124
+UID:fullmoonsnowshoetour-20261123@mikadatasolutions.com
+DESCRIPTION:Event Hours: 6:15 PM - 8:00 PM\n\nDetails: Nov 23 Mon Full Moo
+ n Snowshoe Tour Nov 23 / 6:15 PM - 8:00 PM Enjoy a guided snowshoe tour th
+ rough a moonlit winter wonderland at Tamarack Cross-Country Ski Center. Fu
+ ll Moon Tour\n\nEvent Link: https://www.mammothmountain.com/things-to-do/e
+ vents/tamarack-full-moon-snowshoe-tours
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/tamarack-full-moon
+ -snowshoe-tours
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Thanksgiving Dinners
+DTSTART;VALUE=DATE:20261126
+DTEND;VALUE=DATE:20261127
+UID:thanksgivingdinners-20261126@mikadatasolutions.com
+DESCRIPTION:Event Hours: 2:30 PM - 9:00 PM\n\nDetails: Nov 26 Thu Thanksgi
+ ving Dinners Nov 26 / 2:30 PM - 9:00 PM Join us for Thanksgiving Dinner on
+  Nov 26\, 2026 at Mountainside Bar & Grill\, Apricity\, or The Lakefront R
+ estaurant. Thanksgiving\n\nEvent Link: https://www.mammothmountain.com/thi
+ ngs-to-do/events/thanksgiving-dinners
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/thanksgiving-dinne
+ rs
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Sunset Snowshoe Tour
+DTSTART;VALUE=DATE:20261127
+DTEND;VALUE=DATE:20261128
+UID:sunsetsnowshoetour-20261127@mikadatasolutions.com
+DESCRIPTION:Event Hours: 3:15 PM - 5:00 PM\n\nDetails: Nov 27 Fri Sunset S
+ nowshoe Tour Nov 27 / 3:15 PM - 5:00 PM Venture into the Mammoth Lakes Bas
+ in on snowshoes to take in the breathtaking alpine sunset with small group
+ s and knowledgeable guides. Sunset Tour\n\nEvent Link: https://www.mammoth
+ mountain.com/things-to-do/events/tamarack-sunset-snowshoe-tours
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/tamarack-sunset-sn
+ owshoe-tours
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Holiday Tree Lighting in The Village
+DTSTART;VALUE=DATE:20261127
+DTEND;VALUE=DATE:20261128
+UID:holidaytreelightinginthevillage-20261127@mikadatasolutions.com
+DESCRIPTION:Event Hours: 6:00 PM - 8:30 PM\n\nDetails: Nov 27 Fri Holiday 
+ Tree Lighting in The Village Nov 27 / 6:00 PM - 8:30 PM Join Woolly and Sa
+ nta for photos\, kids activities and live music outdoors before the magica
+ l first lighting of The Village holiday tree. Tree Lighting\n\nEvent Link:
+  https://www.mammothmountain.com/things-to-do/events/holiday-tree-lighting
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/holiday-tree-light
+ ing
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Sunset Snowshoe Tour
+DTSTART;VALUE=DATE:20261128
+DTEND;VALUE=DATE:20261129
+UID:sunsetsnowshoetour-20261128@mikadatasolutions.com
+DESCRIPTION:Event Hours: 3:15 PM - 5:00 PM\n\nDetails: Nov 28 Sat Sunset S
+ nowshoe Tour Nov 28 / 3:15 PM - 5:00 PM Venture into the Mammoth Lakes Bas
+ in on snowshoes to take in the breathtaking alpine sunset with small group
+ s and knowledgeable guides. Sunset Tour\n\nEvent Link: https://www.mammoth
+ mountain.com/things-to-do/events/tamarack-sunset-snowshoe-tours
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/tamarack-sunset-sn
+ owshoe-tours
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Unbound Series Rail Jam 1
+DTSTART;VALUE=DATE:20261129
+DTEND;VALUE=DATE:20261130
+UID:unboundseriesrailjam1-20261129@mikadatasolutions.com
+DESCRIPTION:Event Hours: 8:30 AM - 4:30 PM\n\nDetails: Nov 29 Sun Unbound 
+ Series Rail Jam 1 Nov 29 / 8:30 AM - 4:30 PM Step up your on–hill game w
+ ith some friendly competition or enter for a chance to qualify for the USA
+ SA National Championships. Open to all ages and skill levels. Unbound Seri
+ es\n\nEvent Link: https://www.mammothmountain.com/things-to-do/events/unbo
+ und-series/rail-jam-1
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/unbound-series/rai
+ l-jam-1
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Kids Ski Free Week
+DTSTART;VALUE=DATE:20261205
+DTEND;VALUE=DATE:20261212
+UID:kidsskifreeweek-20261205@mikadatasolutions.com
+DESCRIPTION:Event Hours: Dec 5 (8:30 AM) - Dec 11 (4:00 PM)\n\nDetails: De
+ c 5 Sat Kids Ski Free Week Dec 5 / 8:30 AM - Dec 11 / 4:00 PM Children 12 
+ and under ski free at Mammoth Mountain during Kids Ski Free Week in Decemb
+ er. KIDS SKI FREE WEEK\n\nEvent Link: https://www.mammothmountain.com/plan
+ -your-trip/deals-and-packages/kids-ski-free-week
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/plan-your-trip/deals-and-packages/kids
+ -ski-free-week
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Ikon Pass Holder Early Ups
+DTSTART;VALUE=DATE:20261206
+DTEND;VALUE=DATE:20261207
+UID:ikonpassholderearlyups-20261206@mikadatasolutions.com
+DESCRIPTION:Event Hours: 7:30 AM - 9:30 AM\n\nDetails: Dec 6 Sun Ikon Pass
+  Holder Early Ups Dec 6 / 7:30 AM - 9:30 AM Early Ups offers Ikon Pass Hol
+ ders the chance to enjoy early access to Mammoth Mountain beginning at 7:3
+ 0 AM. Early Ups\n\nEvent Link: https://www.mammothmountain.com/things-to-d
+ o/events/ikon-pass-holder-early-ups/dec
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/ikon-pass-holder-e
+ arly-ups/dec
+END:VEVENT
 END:VCALENDAR
