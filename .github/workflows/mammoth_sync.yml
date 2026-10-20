@@ -23,7 +23,9 @@ jobs:
           cache: 'pip'
 
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
 
       - name: Run Mammoth Extraction
         run: python extract_mammoth_events.py
