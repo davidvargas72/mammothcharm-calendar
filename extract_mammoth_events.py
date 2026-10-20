@@ -1,4 +1,5 @@
 import re
+import json
 import datetime
 import pytz
 from bs4 import BeautifulSoup
@@ -14,15 +15,15 @@ MONTH_MAP = {
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
 }
 
-# Pattern 1: Events with specific times (e.g., "Nov 7 / 5:30 PM - 7:30 PM" or "Dec 5 / 8:30 AM - Dec 11 / 4:00 PM")
+# Pattern 1: Events with clock times (e.g., "Nov 7 / 5:30 PM - 7:30 PM" or "Dec 5 / 8:30 AM - Dec 11 / 4:00 PM")
 TIMED_DATE_PATTERN = re.compile(
     r"([A-Za-z]{3})\s+(\d{1,2})\s*\/\s*(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(?:([A-Za-z]{3})\s+(\d{1,2})\s*\/\s*)?(\d{1,2}:\d{2}\s*[AP]M)",
     re.IGNORECASE
 )
 
-# Pattern 2: All-day or multi-day events without clock times (e.g., "Nov 13 - Nov 15" or "Dec 25")
+# Pattern 2: Date-only events (e.g., "Nov 13 - Nov 15" or "Nov 26 / All Day")
 ALL_DAY_PATTERN = re.compile(
-    r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:\s*-\s*(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{1,2}))?\b",
+    r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:\s*-\s*(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{1,2}))?(?:\s*\/\s*All\s+Day)?\b",
     re.IGNORECASE
 )
 
@@ -33,10 +34,6 @@ def resolve_year(month: int, current_dt: datetime.datetime) -> int:
     return year
 
 def parse_timed_as_all_day(match: re.Match, current_dt: datetime.datetime):
-    """
-    Returns (start_date, end_date, time_summary_str) so timed events become all-day banners
-    with their specific clock times preserved for the description.
-    """
     sm_str, s_day, start_t, em_str, e_day, end_t = match.groups()
     s_month = MONTH_MAP[sm_str[:3].lower()]
     s_year = resolve_year(s_month, current_dt)
@@ -48,7 +45,6 @@ def parse_timed_as_all_day(match: re.Match, current_dt: datetime.datetime):
     if em_str and e_day:
         e_month = MONTH_MAP[em_str[:3].lower()]
         e_year = resolve_year(e_month, current_dt)
-        # Exclusive end date for multi-day ICS all-day events (+1 day)
         end_date = datetime.date(e_year, e_month, int(e_day)) + datetime.timedelta(days=1)
         time_info = f"{sm_str.title()} {s_day} ({clean_start_t}) - {em_str.title()} {e_day} ({clean_end_t})"
     else:
@@ -74,59 +70,75 @@ def parse_all_day_match(match: re.Match, current_dt: datetime.datetime):
 
 def fetch_rendered_html() -> str:
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Use stealth arguments so Cloudflare/Akamai doesn't serve an empty shell
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+            ]
+        )
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
+                "Chrome/128.0.0.0 Safari/537.36"
             ),
-            viewport={"width": 1440, "height": 900}
+            viewport={"width": 1440, "height": 900},
+            locale="en-US",
+            timezone_id="America/Los_Angeles"
         )
+        # Mask webdriver flag
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
         page = context.new_page()
         print(f"Loading {EVENTS_URL}...")
         page.goto(EVENTS_URL, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(5000)
+        page.wait_for_timeout(7000)
 
-        # Dismiss cookie banner if present
-        try:
-            cookie_btn = page.locator("button#onetrust-accept-btn-handler")
-            if cookie_btn.is_visible(timeout=2000):
-                cookie_btn.click()
-                page.wait_for_timeout(1000)
-        except Exception:
-            pass
+        print(f"Page Title Loaded: '{page.title()}'")
 
-        # Click "More Events" / "Load More" repeatedly until all events are shown
-        clicks = 0
-        max_clicks = 25
-        while clicks < max_clicks:
-            more_btn = page.locator(
-                "button, a[role='button']",
-                has_text=re.compile(r"more\s+events|load\s+more|show\s+more", re.IGNORECASE)
-            ).first
+        # Scroll down gradually to trigger lazy-loaded React components
+        for _ in range(3):
+            page.mouse.wheel(0, 800)
+            page.wait_for_timeout(1000)
 
-            if more_btn.count() > 0 and more_btn.is_visible():
-                try:
-                    print(f"Clicking 'More Events' button (click #{clicks + 1})...")
-                    more_btn.scroll_into_view_if_needed()
-                    more_btn.click(timeout=5000)
-                    page.wait_for_timeout(2500)
-                    clicks += 1
-                except Exception as e:
-                    print(f"Finished clicking 'More Events': {e}")
-                    break
+        # Safe JavaScript click loop for "More Events" / "Load More" button
+        for i in range(15):
+            clicked = page.evaluate("""() => {
+                const buttons = Array.from(document.querySelectorAll('button, a'));
+                const target = buttons.find(el => {
+                    const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    return (txt.includes('more events') || txt.includes('load more') || txt.includes('show more'))
+                           && el.offsetParent !== null;
+                });
+                if (target) {
+                    target.scrollIntoView({behavior: 'instant', block: 'center'});
+                    target.click();
+                    return (target.innerText || target.textContent || '').trim();
+                }
+                return null;
+            }""")
+            if clicked:
+                print(f"Clicked button: '{clicked}' (iteration #{i + 1})")
+                page.wait_for_timeout(3000)
             else:
-                print("No more 'More Events' button visible. All events loaded.")
+                print(f"Pagination complete after {i} button clicks.")
                 break
 
         html = page.content()
+        print(f"Total HTML characters captured: {len(html)}")
         browser.close()
         return html
 
 def fetch_and_generate_ics():
     html = fetch_rendered_html()
     soup = BeautifulSoup(html, "html.parser")
+
+    # Diagnostic check in case of CDN block
+    body_text = soup.get_text(" ", strip=True)
+    print(f"Visible text sample (first 300 chars): {body_text[:300]}")
 
     cal = Calendar()
     cal.add("prodid", "-//Mika Data Solutions//Mammoth Mountain Events//EN")
@@ -137,18 +149,32 @@ def fetch_and_generate_ics():
     current_dt = datetime.datetime.now(TIMEZONE)
     seen_uids = set()
 
-    for el in soup.find_all(["li", "div", "article", "a"]):
+    # Search all container elements
+    for el in soup.find_all(["li", "div", "article", "a", "section"]):
         text = " ".join(el.stripped_strings)
-        if len(text) > 550 or len(text) < 15:
+        # Widened upper bound to 1200 chars so full event cards aren't accidentally skipped
+        if len(text) > 1200 or len(text) < 15:
             continue
 
-        timed_match = TIMED_DATE_PATTERN.search(text)
-        all_day_match = None if timed_match else ALL_DAY_PATTERN.search(text)
+        # Ensure this element doesn't contain multiple separate events (must have only 1 timed match)
+        timed_matches = list(TIMED_DATE_PATTERN.finditer(text))
+        if len(timed_matches) > 1:
+            continue
+
+        timed_match = timed_matches[0] if len(timed_matches) == 1 else None
+        all_day_match = None
+
+        if not timed_match:
+            # Only use all-day match if the card specifically looks like an event card (has a heading & link)
+            if el.find(["h2", "h3", "h4"]) and el.find("a", href=True):
+                all_day_matches = list(ALL_DAY_PATTERN.finditer(text))
+                if len(all_day_matches) == 1:
+                    all_day_match = all_day_matches[0]
 
         if not timed_match and not all_day_match:
             continue
 
-        # Extract clean title (event name only, no times)
+        # Extract title
         title = None
         for tag in el.select("h2, h3, h4, h5, strong, [class*='title'], [class*='heading'], [class*='Name']"):
             candidate = tag.get_text(strip=True)
@@ -160,6 +186,13 @@ def fetch_and_generate_ics():
             ):
                 title = candidate
                 break
+
+        if not title:
+            match_obj = timed_match or all_day_match
+            prefix = text[:match_obj.start()].strip()
+            prefix = re.sub(r"^[A-Za-z]{3}\s*\d{1,2}\s*(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*", "", prefix, flags=re.I).strip()
+            if prefix:
+                title = prefix.split(".")[0].strip()
 
         if not title or len(title) > 120:
             continue
@@ -181,7 +214,6 @@ def fetch_and_generate_ics():
         href = link_el["href"] if link_el else ""
         event_url = f"{BASE_URL}{href}" if href.startswith("/") else (href if href.startswith("http") else EVENTS_URL)
 
-        # Build clean description with event hours placed at the very top
         description_lines = [
             f"Event Hours: {time_str}",
             "",
@@ -192,7 +224,6 @@ def fetch_and_generate_ics():
 
         event = Event()
         event.add("summary", title)
-        # Passing datetime.date objects forces VALUE=DATE (solid all-day event banner)
         event.add("dtstart", start_date)
         event.add("dtend", end_date)
         event.add("description", "\n".join(description_lines))
