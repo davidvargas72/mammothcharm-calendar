@@ -234,12 +234,16 @@ class ICSCalendarBuilder:
             dtstart = d_obj.strftime("%Y%m%d")
             dtend = (d_obj + timedelta(days=1)).strftime("%Y%m%d")
 
-            price = str(item.get("price", "0"))
-            min_stay = str(item.get("min_stay", "2"))
             is_avail = item.get("available", True)
-            status_str = "Available" if is_avail else "Unavailable"
 
-            event_title = f"${price} {status_str} {min_stay} Night Min"
+            # --- CONDITIONAL LOGIC ADDED HERE ---
+            if not is_avail:
+                event_title = "Unavailable"
+            else:
+                price = str(item.get("price", "0"))
+                min_stay = str(item.get("min_stay", "2"))
+                event_title = f"${price} | {min_stay} Night Min"
+
             uid = f"{uid_prefix}-{dtstart}@mammothcharm.com"
 
             lines.append("BEGIN:VEVENT")
