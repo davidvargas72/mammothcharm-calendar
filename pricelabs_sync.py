@@ -7,7 +7,7 @@ for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 3.2.1 (Option 1A Cyan/Dark Text Header + Option 2A Pill Badge Legend)
+Version: 3.3.0 (Perpetual Dynamic US Holidays + Option 3 Top-Corner Holiday Tag)
 """
 
 import os
@@ -47,6 +47,45 @@ OUTPUT_DISCOUNTED_HTML = "calendar_discounted.html"
 
 TIMEZONE_STR = "America/Los_Angeles"
 DISCOUNT_MULTIPLIER = 0.75  # 25% reduction
+
+
+# ---------------------------------------------------------------------------
+# Perpetual US Federal Holiday Calculator (Zero external dependencies)
+# ---------------------------------------------------------------------------
+def calculate_us_holidays(year: int) -> Dict[str, str]:
+    """Calculates all 11 US Federal Holidays dynamically using calendar rules.
+    Runs perpetually for 2026, 2027, 2028, and any future year.
+    """
+    def nth_weekday(month: int, weekday: int, n: int) -> str:
+        # weekday: 0 = Mon, 1 = Tue, ..., 6 = Sun
+        first_day = datetime(year, month, 1).date()
+        offset = (weekday - first_day.weekday()) % 7
+        day = 1 + offset + (n - 1) * 7
+        return f"{year}-{month:02d}-{day:02d}"
+
+    def last_weekday(month: int, weekday: int) -> str:
+        if month == 12:
+            next_month = datetime(year + 1, 1, 1).date()
+        else:
+            next_month = datetime(year, month + 1, 1).date()
+        last_day = next_month - timedelta(days=1)
+        offset = (last_day.weekday() - weekday) % 7
+        target = last_day - timedelta(days=offset)
+        return target.strftime("%Y-%m-%d")
+
+    return {
+        f"{year}-01-01": "New Year's",
+        nth_weekday(1, 0, 3): "MLK Day",          # 3rd Monday in Jan
+        nth_weekday(2, 0, 3): "Presidents' Day",   # 3rd Monday in Feb
+        last_weekday(5, 0): "Memorial Day",        # Last Monday in May
+        f"{year}-06-19": "Juneteenth",
+        f"{year}-07-04": "4th of July",
+        nth_weekday(9, 0, 1): "Labor Day",         # 1st Monday in Sep
+        nth_weekday(10, 0, 2): "Columbus Day",     # 2nd Monday in Oct
+        f"{year}-11-11": "Veterans Day",
+        nth_weekday(11, 3, 4): "Thanksgiving",     # 4th Thursday in Nov
+        f"{year}-12-25": "Christmas",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +196,11 @@ class PriceLabsExtractor:
         end_date = start_date + timedelta(days=365)
         logger.info(f"Filtering calendar window: {start_date} to {end_date} ({TIMEZONE_STR})")
 
+        # Dynamically build holiday catalog across the active 3-year rolling window
+        holiday_catalog = {}
+        for y in range(today.year, today.year + 3):
+            holiday_catalog.update(calculate_us_holidays(y))
+
         standard_records = []
         discounted_records = []
 
@@ -174,6 +218,7 @@ class PriceLabsExtractor:
                 continue
 
             is_avail = self._determine_availability(r)
+            holiday_name = holiday_catalog.get(d_str, "")
 
             raw_price = r.get("price") or r.get("final_price") or r.get("recommended_price") or 0
             try:
@@ -190,14 +235,16 @@ class PriceLabsExtractor:
                 "date": d_str,
                 "price": str(std_price),
                 "min_stay": min_stay,
-                "available": is_avail
+                "available": is_avail,
+                "holiday": holiday_name
             })
 
             discounted_records.append({
                 "date": d_str,
                 "price": str(disc_price),
                 "min_stay": min_stay,
-                "available": is_avail
+                "available": is_avail,
+                "holiday": holiday_name
             })
 
         logger.info(f"Retained {len(standard_records)} dates starting from {start_date}.")
@@ -241,13 +288,15 @@ class ICSCalendarBuilder:
             dtend = (d_obj + timedelta(days=1)).strftime("%Y%m%d")
 
             is_avail = item.get("available", True)
+            holiday = item.get("holiday", "")
+            holiday_suffix = f" [{holiday}]" if holiday else ""
 
             if not is_avail:
-                event_title = "Unavailable"
+                event_title = f"Unavailable{holiday_suffix}"
             else:
                 price = str(item.get("price", "0"))
                 min_stay = str(item.get("min_stay", "2"))
-                event_title = f"${price} | {min_stay} Night Min"
+                event_title = f"${price} | {min_stay} Night Min{holiday_suffix}"
 
             uid = f"{uid_prefix}-{dtstart}@mammothcharm.com"
 
@@ -268,7 +317,7 @@ class ICSCalendarBuilder:
 
 
 # ---------------------------------------------------------------------------
-# 3. Interactive HTML Calendar Grid Builder
+# 3. Interactive HTML Calendar Grid Builder (Option 3: Corner Holiday Tag)
 # ---------------------------------------------------------------------------
 class HTMLCalendarBuilder:
     """Builds a standalone, responsive monthly HTML calendar grid."""
@@ -300,34 +349,48 @@ class HTMLCalendarBuilder:
   * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
   body {{ margin: 0; padding: 12px; background: #ffffff; color: #1e293b; }}
   .cal-container {{ max-width: 900px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
+  
+  /* Cyan Header with Dark Text */
   .cal-header {{ display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--header-bg); color: var(--header-text); }}
   .cal-title {{ font-size: 1.35rem; font-weight: 800; margin: 0; color: var(--header-text); letter-spacing: -0.01em; }}
   .nav-btns {{ display: flex; gap: 8px; align-items: center; }}
   .nav-btn {{ background: #0f172a; border: none; color: #ffffff; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.88rem; transition: background 0.15s, transform 0.1s; }}
   .nav-btn:hover {{ background: #1e293b; }}
   .nav-btn:active {{ transform: scale(0.98); }}
+
+  /* Legend Bar with Holiday Sample Badge */
   .legend {{ display: flex; gap: 12px; padding: 12px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; align-items: center; justify-content: space-between; flex-wrap: wrap; }}
   .legend-items {{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }}
   .legend-pill {{ display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; }}
   .pill-avail {{ background: var(--bg-avail); color: var(--text-avail); border: 1px solid var(--border-avail); }}
   .pill-unavail {{ background: var(--bg-unavail); color: var(--text-unavail); border: 1px solid var(--border-unavail); }}
+  .pill-holiday {{ background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-weight: 700; padding: 5px 10px; border-radius: 6px; font-size: 0.80rem; }}
   .updated-label {{ color: #64748b; font-size: 0.78rem; font-weight: 500; }}
+
   .weekdays {{ display: grid; grid-template-columns: repeat(7, 1fr); background: #f1f5f9; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 700; font-size: 0.8rem; padding: 9px 0; color: #334155; }}
   .days-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #cbd5e1; }}
-  .day-cell {{ min-height: 85px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; }}
+  .day-cell {{ min-height: 92px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; }}
   .day-cell.empty {{ background: #f8fafc; }}
   .day-cell.avail {{ background: var(--bg-avail); }}
   .day-cell.unavail {{ background: var(--bg-unavail); color: var(--text-unavail); }}
-  .day-num {{ font-size: 0.8rem; font-weight: 700; text-align: right; color: #475569; }}
+  
+  /* Option 3: Top-Row Holiday Tag + Day Number */
+  .day-top {{ display: flex; justify-content: space-between; align-items: flex-start; width: 100%; gap: 4px; }}
+  .holiday-tag {{ font-size: 0.64rem; font-weight: 700; color: #92400e; background: #fef3c7; border: 1px solid #fde68a; padding: 1px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75%; line-height: 1.25; }}
+  .day-cell.unavail .holiday-tag {{ background: #ffffff; border-color: #fda4af; color: #be123c; }}
+  .day-num {{ font-size: 0.8rem; font-weight: 700; text-align: right; color: #475569; margin-left: auto; }}
+  
   .day-content {{ text-align: center; margin: auto 0; }}
   .price {{ font-size: 1.05rem; font-weight: 800; color: var(--text-avail); display: block; }}
   .min-stay {{ font-size: 0.72rem; color: #334155; display: block; margin-top: 2px; font-weight: 600; }}
   .unavail-label {{ font-size: 0.8rem; font-weight: 700; color: var(--text-unavail); }}
+
   @media (max-width: 600px) {{
     .cal-header {{ flex-direction: column; gap: 10px; align-items: flex-start; }}
-    .day-cell {{ min-height: 68px; padding: 4px; }}
+    .day-cell {{ min-height: 74px; padding: 3px; }}
+    .holiday-tag {{ font-size: 0.54rem; padding: 0 3px; max-width: 68%; }}
     .price {{ font-size: 0.85rem; }}
-    .min-stay {{ font-size: 0.6rem; }}
+    .min-stay {{ font-size: 0.58rem; }}
     .unavail-label {{ font-size: 0.65rem; }}
   }}
 </style>
@@ -346,6 +409,7 @@ class HTMLCalendarBuilder:
     <div class="legend-items">
       <span class="legend-pill pill-avail">Available ($ Rate &amp; Min Stay)</span>
       <span class="legend-pill pill-unavail">Unavailable</span>
+      <span class="pill-holiday">★ US Holiday</span>
     </div>
     <span class="updated-label">Updated: {updated_str}</span>
   </div>
@@ -388,6 +452,12 @@ class HTMLCalendarBuilder:
       const info = dataMap[dateStr];
 
       let contentHtml = "";
+      let holidayTagHtml = "";
+
+      if (info && info.holiday) {{
+        holidayTagHtml = `<span class="holiday-tag" title="${{info.holiday}}">★ ${{info.holiday}}</span>`;
+      }}
+
       if (!info) {{
         cell.className = "day-cell empty";
       }} else if (!info.available) {{
@@ -398,7 +468,7 @@ class HTMLCalendarBuilder:
         contentHtml = `<div class="day-content"><span class="price">$${{info.price}}</span><span class="min-stay">${{info.min_stay}} Night Min</span></div>`;
       }}
 
-      cell.innerHTML = `<div class="day-num">${{d}}</div>${{contentHtml}}`;
+      cell.innerHTML = `<div class="day-top">${{holidayTagHtml}}<span class="day-num">${{d}}</span></div>${{contentHtml}}`;
       grid.appendChild(cell);
     }}
   }}
