@@ -4,10 +4,10 @@ PriceLabs Dynamic Pricing Calendar Automation
 =============================================
 Automates the daily extraction of PriceLabs dynamic pricing and minimum stay rules
 for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
-(Standard and 25% Discounted), and publishes them for Google Calendar consumption.
+AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 2.0.0 (Dual-feed generation: Standard & Discounted)
+Version: 3.0.0 (Dual-feed .ics + Interactive HTML Calendar Grids)
 """
 
 import os
@@ -41,6 +41,10 @@ PRICELABS_PMS_NAME = os.getenv("PRICELABS_PMS_NAME", "airbnb")
 
 OUTPUT_STANDARD_FILENAME = os.getenv("OUTPUT_ICS_FILENAME", "pricelabs_pricing.ics")
 OUTPUT_DISCOUNTED_FILENAME = os.getenv("OUTPUT_DISCOUNTED_ICS_FILENAME", "pricelabs_discounted.ics")
+
+OUTPUT_STANDARD_HTML = "calendar.html"
+OUTPUT_DISCOUNTED_HTML = "calendar_discounted.html"
+
 TIMEZONE_STR = "America/Los_Angeles"
 DISCOUNT_MULTIPLIER = 0.75  # 25% reduction
 
@@ -236,7 +240,6 @@ class ICSCalendarBuilder:
 
             is_avail = item.get("available", True)
 
-            # --- CONDITIONAL LOGIC ADDED HERE ---
             if not is_avail:
                 event_title = "Unavailable"
             else:
@@ -262,6 +265,153 @@ class ICSCalendarBuilder:
         return "\r\n".join(lines) + "\r\n"
 
 # ---------------------------------------------------------------------------
+# 3. Interactive HTML Calendar Grid Builder
+# ---------------------------------------------------------------------------
+class HTMLCalendarBuilder:
+    """Builds a standalone, responsive monthly HTML calendar grid."""
+
+    def __init__(self, title: str):
+        self.title = title
+
+    def build_html(self, pricing_records: List[Dict[str, Any]]) -> str:
+        records_json = json.dumps(pricing_records)
+        updated_str = datetime.now().strftime("%b %d, %Y")
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{self.title}</title>
+<style>
+  :root {{
+    --bg-avail: #f0fdf4;
+    --border-avail: #bbf7d0;
+    --text-avail: #166534;
+    --bg-unavail: #f3f4f6;
+    --text-unavail: #9ca3af;
+    --primary: #1e293b;
+  }}
+  * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+  body {{ margin: 0; padding: 12px; background: #ffffff; color: var(--primary); }}
+  .cal-container {{ max-width: 900px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }}
+  .cal-header {{ display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--primary); color: #fff; }}
+  .cal-title {{ font-size: 1.25rem; font-weight: 700; margin: 0; }}
+  .nav-btns {{ display: flex; gap: 8px; align-items: center; }}
+  .nav-btn {{ background: rgba(255,255,255,0.15); border: none; color: #fff; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: background 0.15s; }}
+  .nav-btn:hover {{ background: rgba(255,255,255,0.28); }}
+  .legend {{ display: flex; gap: 16px; padding: 10px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }}
+  .legend-items {{ display: flex; gap: 16px; align-items: center; }}
+  .dot {{ width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; }}
+  .dot-avail {{ background: var(--bg-avail); border: 1px solid var(--border-avail); }}
+  .dot-unavail {{ background: var(--bg-unavail); border: 1px solid #d1d5db; }}
+  .weekdays {{ display: grid; grid-template-columns: repeat(7, 1fr); background: #f1f5f9; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 600; font-size: 0.8rem; padding: 8px 0; color: #475569; }}
+  .days-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #e2e8f0; }}
+  .day-cell {{ min-height: 85px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; }}
+  .day-cell.empty {{ background: #f8fafc; }}
+  .day-cell.avail {{ background: var(--bg-avail); }}
+  .day-cell.unavail {{ background: var(--bg-unavail); color: var(--text-unavail); }}
+  .day-num {{ font-size: 0.8rem; font-weight: 600; text-align: right; color: #64748b; }}
+  .day-content {{ text-align: center; margin: auto 0; }}
+  .price {{ font-size: 1.05rem; font-weight: 700; color: var(--text-avail); display: block; }}
+  .min-stay {{ font-size: 0.7rem; color: #475569; display: block; margin-top: 2px; }}
+  .unavail-label {{ font-size: 0.8rem; font-weight: 500; text-decoration: line-through; color: var(--text-unavail); }}
+  @media (max-width: 600px) {{
+    .day-cell {{ min-height: 68px; padding: 4px; }}
+    .price {{ font-size: 0.85rem; }}
+    .min-stay {{ font-size: 0.6rem; }}
+    .unavail-label {{ font-size: 0.68rem; }}
+  }}
+</style>
+</head>
+<body>
+<div class="cal-container">
+  <div class="cal-header">
+    <h2 class="cal-title" id="monthLabel">Loading...</h2>
+    <div class="nav-btns">
+      <button class="nav-btn" onclick="changeMonth(-1)">&#8592; Prev</button>
+      <button class="nav-btn" onclick="goToday()">Today</button>
+      <button class="nav-btn" onclick="changeMonth(1)">Next &#8594;</button>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-items">
+      <span><span class="dot dot-avail"></span>Available (Nightly Rate &amp; Min Stay)</span>
+      <span><span class="dot dot-unavail"></span>Unavailable</span>
+    </div>
+    <span style="color:#64748b;font-size:0.75rem;">Updated: {updated_str}</span>
+  </div>
+  <div class="weekdays">
+    <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+  </div>
+  <div class="days-grid" id="daysGrid"></div>
+</div>
+
+<script>
+  const rawData = {records_json};
+  const dataMap = {{}};
+  rawData.forEach(item => {{ dataMap[item.date] = item; }});
+
+  let current = new Date();
+  current.setDate(1);
+
+  function renderCalendar() {{
+    const year = current.getFullYear();
+    const month = current.getMonth();
+    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    document.getElementById("monthLabel").innerText = monthNames[month] + " " + year;
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const grid = document.getElementById("daysGrid");
+    grid.innerHTML = "";
+
+    for (let i = 0; i < firstDay; i++) {{
+      const empty = document.createElement("div");
+      empty.className = "day-cell empty";
+      grid.appendChild(empty);
+    }}
+
+    for (let d = 1; d <= daysInMonth; d++) {{
+      const cell = document.createElement("div");
+      const mm = String(month + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const dateStr = `${{year}}-${{mm}}-${{dd}}`;
+      const info = dataMap[dateStr];
+
+      let contentHtml = "";
+      if (!info) {{
+        cell.className = "day-cell empty";
+      }} else if (!info.available) {{
+        cell.className = "day-cell unavail";
+        contentHtml = `<div class="day-content"><span class="unavail-label">Unavailable</span></div>`;
+      }} else {{
+        cell.className = "day-cell avail";
+        contentHtml = `<div class="day-content"><span class="price">$${{info.price}}</span><span class="min-stay">${{info.min_stay}} nt min</span></div>`;
+      }}
+
+      cell.innerHTML = `<div class="day-num">${{d}}</div>${{contentHtml}}`;
+      grid.appendChild(cell);
+    }}
+  }}
+
+  function changeMonth(delta) {{
+    current.setMonth(current.getMonth() + delta);
+    renderCalendar();
+  }}
+
+  function goToday() {{
+    current = new Date();
+    current.setDate(1);
+    renderCalendar();
+  }}
+
+  renderCalendar();
+</script>
+</body>
+</html>"""
+
+# ---------------------------------------------------------------------------
 # Main Execution Pipeline
 # ---------------------------------------------------------------------------
 def main():
@@ -274,19 +424,31 @@ def main():
     )
     standard_records, discounted_records = extractor.fetch_pricing()
 
-    # 1. Standard Calendar Feed
+    # 1. Standard Calendar Feed (.ics)
     std_builder = ICSCalendarBuilder(calendar_name="PriceLabs")
     std_ics = std_builder.build_ics(standard_records, uid_prefix="pricelabs-std")
     with open(OUTPUT_STANDARD_FILENAME, "w", encoding="utf-8") as f:
         f.write(std_ics)
     logger.info(f"Standard calendar written to: {OUTPUT_STANDARD_FILENAME}")
 
-    # 2. Discounted Calendar Feed (-25%)
+    # 2. Discounted Calendar Feed (.ics)
     disc_builder = ICSCalendarBuilder(calendar_name="PriceLabs Discounted")
     disc_ics = disc_builder.build_ics(discounted_records, uid_prefix="pricelabs-disc")
     with open(OUTPUT_DISCOUNTED_FILENAME, "w", encoding="utf-8") as f:
         f.write(disc_ics)
     logger.info(f"Discounted calendar written to: {OUTPUT_DISCOUNTED_FILENAME}")
+
+    # 3. Standard Interactive HTML Calendar
+    std_html_builder = HTMLCalendarBuilder(title="Mammoth Charm - Rates & Availability")
+    with open(OUTPUT_STANDARD_HTML, "w", encoding="utf-8") as f:
+        f.write(std_html_builder.build_html(standard_records))
+    logger.info(f"Standard HTML calendar written to: {OUTPUT_STANDARD_HTML}")
+
+    # 4. Discounted Interactive HTML Calendar
+    disc_html_builder = HTMLCalendarBuilder(title="Mammoth Charm - Direct Rates (25% Off)")
+    with open(OUTPUT_DISCOUNTED_HTML, "w", encoding="utf-8") as f:
+        f.write(disc_html_builder.build_html(discounted_records))
+    logger.info(f"Discounted HTML calendar written to: {OUTPUT_DISCOUNTED_HTML}")
 
     logger.info("=== PriceLabs Calendar Sync Finished Successfully ===")
 
