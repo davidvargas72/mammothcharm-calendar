@@ -2,20 +2,22 @@
 """
 PriceLabs Dynamic Pricing Calendar Automation
 =============================================
-Automates the daily extraction of PriceLabs dynamic pricing and minimum stay rules
-for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
+Automates the extraction of PriceLabs dynamic pricing and minimum stay rules
+PLUS real-time booked/blocked dates directly from Airbnb's iCalendar (.ics) feed
+for Mammoth Charm LLC. Builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 3.6.2 (Updated 24-Hour Confirmation Message + Mandatory Guest Count)
+Version: 3.7.0 (Direct Airbnb iCal Sync + 24hr Inquiry Confirmation + Mandatory Guest Count)
 """
 
 import os
 import sys
+import re
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Set
 
 try:
     from zoneinfo import ZoneInfo
@@ -38,6 +40,12 @@ logger = logging.getLogger("pricelabs_sync")
 PRICELABS_API_KEY = os.getenv("PRICELABS_API_KEY", "")
 PRICELABS_LISTING_ID = os.getenv("PRICELABS_LISTING_ID", "1089448089629471493")
 PRICELABS_PMS_NAME = os.getenv("PRICELABS_PMS_NAME", "airbnb")
+
+# Direct Airbnb iCal URL for real-time availability override
+AIRBNB_ICAL_URL = os.getenv(
+    "AIRBNB_ICAL_URL",
+    "https://www.airbnb.com/calendar/ical/1089448089629471493.ics?t=8d0abb3562d14c34a55f64514154b318"
+)
 
 OUTPUT_STANDARD_FILENAME = os.getenv("OUTPUT_ICS_FILENAME", "pricelabs_pricing.ics")
 OUTPUT_DISCOUNTED_FILENAME = os.getenv("OUTPUT_DISCOUNTED_ICS_FILENAME", "pricelabs_discounted.ics")
@@ -90,6 +98,60 @@ def calculate_us_holidays(year: int) -> Dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# 0. Direct Airbnb iCalendar (.ics) Availability Extractor
+# ---------------------------------------------------------------------------
+class AirbnbICalExtractor:
+    """Fetches and parses Airbnb's direct iCal feed to extract all booked/blocked dates."""
+
+    def __init__(self, ical_url: str):
+        self.ical_url = ical_url
+
+    def fetch_blocked_dates(self) -> Set[str]:
+        blocked_dates: Set[str] = set()
+        if not self.ical_url:
+            return blocked_dates
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/3.7; +https://mammothcharm.com)"
+        }
+
+        try:
+            logger.info("Fetching live availability directly from Airbnb iCal feed...")
+            response = requests.get(self.ical_url, headers=headers, timeout=20)
+            if response.status_code != 200:
+                logger.warning(f"Airbnb iCal returned HTTP {response.status_code}. Falling back to PriceLabs availability.")
+                return blocked_dates
+
+            # Unfold RFC 5545 multi-line fields
+            raw_ics = response.text.replace("\r\n ", "").replace("\r\n\t", "").replace("\n ", "")
+            events = re.findall(r"BEGIN:VEVENT(.*?)END:VEVENT", raw_ics, re.DOTALL)
+
+            for event_block in events:
+                dtstart_match = re.search(r"DTSTART(?:;[^:]*)?:(\d{8})", event_block)
+                dtend_match = re.search(r"DTEND(?:;[^:]*)?:(\d{8})", event_block)
+
+                if dtstart_match and dtend_match:
+                    start_str = dtstart_match.group(1)
+                    end_str = dtend_match.group(1)
+                    try:
+                        start_date = datetime.strptime(start_str, "%Y%m%d").date()
+                        end_date = datetime.strptime(end_str, "%Y%m%d").date()
+                        curr = start_date
+                        # In iCal, DTEND is exclusive (morning of check-out)
+                        while curr < end_date:
+                            blocked_dates.add(curr.strftime("%Y-%m-%d"))
+                            curr += timedelta(days=1)
+                    except ValueError:
+                        continue
+
+            logger.info(f"Successfully parsed {len(blocked_dates)} booked/blocked nights directly from Airbnb iCal.")
+        except Exception as e:
+            logger.warning(f"Failed to fetch Airbnb iCal ({e}). Falling back to PriceLabs availability.")
+
+        return blocked_dates
+
+
+# ---------------------------------------------------------------------------
 # 1. PriceLabs Data Extractor
 # ---------------------------------------------------------------------------
 class PriceLabsExtractor:
@@ -97,10 +159,11 @@ class PriceLabsExtractor:
 
     API_BASE_URL = "https://api.pricelabs.co/v1"
 
-    def __init__(self, api_key: str, listing_id: str, pms: str = "airbnb"):
+    def __init__(self, api_key: str, listing_id: str, pms: str = "airbnb", airbnb_blocked: Set[str] = None):
         self.api_key = api_key
         self.listing_id = listing_id
         self.pms = pms
+        self.airbnb_blocked = airbnb_blocked or set()
 
     def fetch_pricing(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         if not self.api_key:
@@ -145,7 +208,12 @@ class PriceLabsExtractor:
             logger.error(f"PriceLabs API returned HTTP {response.status_code}: {response.text}")
             raise RuntimeError(f"PriceLabs API request failed: {response.status_code}")
 
-    def _determine_availability(self, r: Dict[str, Any]) -> bool:
+    def _determine_availability(self, r: Dict[str, Any], d_str: str) -> bool:
+        # 1. Master check: If date is blocked in live Airbnb iCal, mark unavailable immediately
+        if d_str in self.airbnb_blocked:
+            return False
+
+        # 2. Secondary check: PriceLabs internal occupancy / booking flags
         if "occupancy" in r and r["occupancy"] is not None:
             try:
                 occ = float(r["occupancy"])
@@ -216,7 +284,7 @@ class PriceLabsExtractor:
             if d_obj < start_date or d_obj > end_date:
                 continue
 
-            is_avail = self._determine_availability(r)
+            is_avail = self._determine_availability(r, d_str)
             holiday_name = holiday_catalog.get(d_str, "")
 
             raw_price = r.get("price") or r.get("final_price") or r.get("recommended_price") or 0
@@ -318,7 +386,11 @@ class HTMLCalendarBuilder:
 
     def build_html(self, pricing_records: List[Dict[str, Any]]) -> str:
         records_json = json.dumps(pricing_records)
-        updated_str = datetime.now().strftime("%b %d, %Y")
+        if ZoneInfo:
+            now_local = datetime.now(ZoneInfo(TIMEZONE_STR))
+        else:
+            now_local = datetime.utcnow() - timedelta(hours=7)
+        updated_str = now_local.strftime("%b %d, %Y")
 
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -790,12 +862,18 @@ class HTMLCalendarBuilder:
 # Main Execution Pipeline
 # ---------------------------------------------------------------------------
 def main():
-    logger.info("=== Starting PriceLabs Calendar Sync ===")
+    logger.info("=== Starting PriceLabs + Airbnb iCal Calendar Sync ===")
 
+    # 1. Fetch live blocked/booked nights directly from Airbnb iCal
+    airbnb_extractor = AirbnbICalExtractor(ical_url=AIRBNB_ICAL_URL)
+    airbnb_blocked_dates = airbnb_extractor.fetch_blocked_dates()
+
+    # 2. Fetch rates and min-stays from PriceLabs, overriding availability with Airbnb iCal
     extractor = PriceLabsExtractor(
         api_key=PRICELABS_API_KEY,
         listing_id=PRICELABS_LISTING_ID,
-        pms=PRICELABS_PMS_NAME
+        pms=PRICELABS_PMS_NAME,
+        airbnb_blocked=airbnb_blocked_dates
     )
     standard_records, discounted_records = extractor.fetch_pricing()
 
@@ -817,7 +895,7 @@ def main():
     with open(OUTPUT_DISCOUNTED_HTML, "w", encoding="utf-8") as f:
         f.write(disc_html_builder.build_html(discounted_records))
 
-    logger.info("=== PriceLabs Calendar Sync Finished Successfully ===")
+    logger.info("=== PriceLabs + Airbnb Calendar Sync Finished Successfully ===")
 
 
 if __name__ == "__main__":
