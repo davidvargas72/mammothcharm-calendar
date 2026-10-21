@@ -8,7 +8,7 @@ for Mammoth Charm LLC. Builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 3.8.0 (Visual "Check-Out Only" Turnaround Indicator + Direct Airbnb iCal Sync)
+Version: 3.9.1 (Zero Dynamic Check-In Text + Dynamic "Check-out" Badge on First Booked Date)
 """
 
 import os
@@ -112,7 +112,7 @@ class AirbnbICalExtractor:
             return blocked_dates
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/3.8; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/3.9.1; +https://mammothcharm.com)"
         }
 
         try:
@@ -429,9 +429,9 @@ class HTMLCalendarBuilder:
   .pill-holiday {{ background: transparent; color: var(--star-color); font-weight: 800; font-size: 0.85rem; padding: 0; }}
   .updated-label {{ color: #64748b; font-size: 0.75rem; font-weight: 500; }}
 
-  .quote-prompt {{ background: #f0fdfa; border-bottom: 1px solid #ccfbf1; padding: 7px 18px; font-size: 0.8rem; font-weight: 600; color: #0f766e; display: flex; justify-content: space-between; align-items: center; }}
-  .clear-btn {{ background: transparent; border: 1px solid #0f766e; color: #0f766e; border-radius: 4px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: none; }}
-  .clear-btn:hover {{ background: #ccfbf1; }}
+  .quote-prompt {{ background: #f0fdfa; border-bottom: 1px solid #ccfbf1; padding: 6px 18px; font-size: 0.8rem; font-weight: 600; color: #0f766e; display: flex; justify-content: space-between; align-items: center; min-height: 36px; }}
+  .clear-btn {{ background: #ffffff; border: 1px solid #0f766e; color: #0f766e; border-radius: 4px; padding: 3px 10px; font-size: 0.74rem; font-weight: 700; cursor: pointer; display: none; margin-left: auto; transition: all 0.15s; }}
+  .clear-btn:hover {{ background: #0f766e; color: #ffffff; }}
 
   .weekdays {{ display: grid; grid-template-columns: repeat(7, 1fr); background: #f1f5f9; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 700; font-size: 0.8rem; padding: 8px 0; color: #334155; }}
   .days-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #cbd5e1; }}
@@ -442,27 +442,32 @@ class HTMLCalendarBuilder:
   .day-cell.avail:hover {{ filter: brightness(0.96); }}
   .day-cell.unavail {{ background: var(--bg-unavail); }}
 
-  /* Subtle Turnaround Check-Out Only Indicator */
+  /* Dynamic "Check-out" Indicator on the First Booked Day */
   .day-cell.unavail.checkout-eligible {{
     cursor: pointer;
-    background: linear-gradient(135deg, #ccfbf1 0%, #ffe4e6 65%) !important;
-    outline: 2px dashed #00c4b3;
+    background: linear-gradient(135deg, #dcfce7 0%, #ffe4e6 68%) !important;
+    outline: 2px dashed #0d9488;
     outline-offset: -2px;
   }}
   .day-cell.unavail.checkout-eligible:hover {{
-    filter: brightness(0.96);
+    filter: brightness(0.95);
   }}
   .checkout-only-badge {{
-    font-size: 0.62rem;
+    font-size: 0.65rem;
     font-weight: 800;
-    color: #0f766e;
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid #5eead4;
-    padding: 2px 5px;
-    border-radius: 3px;
+    color: #0f172a;
+    background: #ffffff;
+    border: 1.5px solid #0d9488;
+    padding: 2px 6px;
+    border-radius: 4px;
     display: inline-block;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    transition: all 0.12s;
+  }}
+  .day-cell.unavail.checkout-eligible:hover .checkout-only-badge {{
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
   }}
 
   .day-cell.selected-endpoint {{ background: var(--header-bg) !important; color: var(--header-text) !important; outline: none !important; }}
@@ -509,7 +514,7 @@ class HTMLCalendarBuilder:
     .price {{ font-size: 0.85rem; }}
     .min-stay {{ font-size: 0.62rem; }}
     .endpoint-badge {{ font-size: 0.52rem; padding: 1px 2px; }}
-    .checkout-only-badge {{ font-size: 0.5rem; padding: 1px 3px; }}
+    .checkout-only-badge {{ font-size: 0.52rem; padding: 1px 3px; }}
     .quote-grid {{ flex-direction: column; align-items: flex-start; }}
     .quote-right {{ width: 100%; justify-content: space-between; }}
     .form-row {{ grid-template-columns: 1fr; }}
@@ -598,12 +603,12 @@ class HTMLCalendarBuilder:
     return d.toLocaleDateString('en-US', {{ month: 'short', day: 'numeric', year: 'numeric' }});
   }}
 
-  // Finds the very first booked date after checkInStr (the only booked date eligible for morning check-out)
+  // Finds the very first booked date after checkInStr (eligible for morning check-out)
   function getFirstBookedAfter(checkInStr) {{
     if (!checkInStr) return null;
-    let curr = parseLocal(checkInStr);
-    for (let i = 0; i < 365; i++) {{
-      curr.setDate(curr.getDate() + 1);
+    const startObj = parseLocal(checkInStr);
+    for (let i = 1; i <= 365; i++) {{
+      const curr = new Date(startObj.getFullYear(), startObj.getMonth(), startObj.getDate() + i);
       const y = curr.getFullYear();
       const m = String(curr.getMonth() + 1).padStart(2, '0');
       const d = String(curr.getDate()).padStart(2, '0');
@@ -623,7 +628,7 @@ class HTMLCalendarBuilder:
       if (!info.available) return;
       checkInDate = dateStr;
       checkOutDate = null;
-      document.getElementById("promptText").innerText = "Check-In: " + formatDisplayDate(checkInDate) + " — Now click your Check-Out date.";
+      document.getElementById("promptText").innerText = "";
       document.getElementById("clearBtn").style.display = "inline-block";
       document.getElementById("quoteCard").style.display = "none";
       document.getElementById("inquiryForm").style.display = "none";
@@ -638,7 +643,7 @@ class HTMLCalendarBuilder:
       if (clickedObj <= startObj) {{
         if (info.available) {{
           checkInDate = dateStr;
-          document.getElementById("promptText").innerText = "Check-In: " + formatDisplayDate(checkInDate) + " — Now click your Check-Out date.";
+          document.getElementById("promptText").innerText = "";
         }} else {{
           clearSelection();
         }}
@@ -776,7 +781,6 @@ class HTMLCalendarBuilder:
 
     const grandTotal = accommodationTotal + CLEANING_FEE;
     const datesLabel = `${{formatDisplayDate(checkInDate)}} to ${{formatDisplayDate(checkOutDate)}}`;
-    document.getElementById("promptText").innerText = `Selected Stay: ${{datesLabel}} (${{nights}} nights)`;
 
     detailsBox.innerHTML = `
       <strong>${{formatDisplayDate(checkInDate)}} &rarr; ${{formatDisplayDate(checkOutDate)}}</strong> (${{nights}} Nights)<br>
@@ -843,7 +847,7 @@ class HTMLCalendarBuilder:
         if (dateStr === eligibleTurnaroundDate) {{
           cell.classList.add("checkout-eligible");
           cell.onclick = () => handleDayClick(dateStr);
-          contentHtml = `<div class="day-content"><span class="checkout-only-badge">Check-Out Only</span></div>`;
+          contentHtml = `<div class="day-content"><span class="checkout-only-badge">Check-out</span></div>`;
         }}
         if (isCheckOut) {{
           cell.classList.add("selected-endpoint");
