@@ -49,7 +49,6 @@
   .day-cell.unavail { background: var(--bg-unavail); }
   .day-cell.unavail.checkout-eligible { cursor: pointer; }
 
-  /* Interactive Selection States */
   .day-cell.selected-endpoint { background: var(--header-bg) !important; color: var(--header-text) !important; }
   .day-cell.selected-endpoint .price,
   .day-cell.selected-endpoint .min-stay,
@@ -65,17 +64,24 @@
   .price { font-size: 1.05rem; font-weight: 800; color: var(--text-avail); display: block; }
   .min-stay { font-size: 0.72rem; color: #334155; display: block; margin-top: 2px; font-weight: 600; }
 
-  /* Quote Summary Box */
+  /* Quote Summary & Built-In Form */
   .quote-card { background: #f8fafc; border-top: 2px solid var(--header-bg); padding: 14px 18px; display: none; }
   .quote-grid { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
   .quote-details { font-size: 0.88rem; color: #334155; line-height: 1.5; }
   .quote-right { text-align: right; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .quote-total { font-size: 1.3rem; font-weight: 800; color: #0f172a; }
-  .quote-btn { background: var(--header-bg); color: var(--header-text); border: none; font-weight: 800; font-size: 0.88rem; padding: 10px 16px; border-radius: 6px; text-decoration: none; display: inline-block; cursor: pointer; transition: background 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .quote-btn { background: var(--header-bg); color: var(--header-text); border: none; font-weight: 800; font-size: 0.88rem; padding: 10px 16px; border-radius: 6px; cursor: pointer; transition: background 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   .quote-btn:hover { background: #00a89a; }
   .quote-error { color: #be123c; font-size: 0.85rem; font-weight: 700; }
 
-  /* Bottom Holiday List */
+  .inquiry-form { margin-top: 14px; padding-top: 14px; border-top: 1px solid #cbd5e1; display: none; }
+  .form-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+  .form-input { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 0.85rem; }
+  .form-submit-row { display: flex; gap: 10px; align-items: center; }
+  .submit-btn { background: #0f172a; color: #ffffff; border: none; font-weight: 700; font-size: 0.85rem; padding: 9px 18px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+  .submit-btn:hover { background: #1e293b; }
+  .form-status { font-size: 0.85rem; font-weight: 700; margin-top: 8px; display: none; }
+
   .monthly-holidays { background: #f8fafc; padding: 12px 18px; font-size: 0.85rem; color: #334155; border-top: 1px solid #cbd5e1; }
   .holiday-list-title { font-weight: 800; margin-bottom: 6px; color: #0f172a; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
   .holiday-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 12px 24px; }
@@ -89,6 +95,8 @@
     .endpoint-badge { font-size: 0.52rem; padding: 1px 2px; }
     .quote-grid { flex-direction: column; align-items: flex-start; }
     .quote-right { width: 100%; justify-content: space-between; }
+    .form-row { grid-template-columns: 1fr; }
+    .form-submit-row { flex-direction: column; align-items: stretch; }
     .monthly-holidays { padding: 10px 14px; }
     .holiday-list { flex-direction: column; gap: 4px; }
   }
@@ -126,10 +134,23 @@
       <div class="quote-details" id="quoteDetails"></div>
       <div class="quote-right">
         <div class="quote-total" id="quoteTotal"></div>
-        <a href="#" class="quote-btn" id="inquireBtn" target="_blank" rel="noopener">Inquire to Book</a>
+        <button type="button" class="quote-btn" id="inquireBtn" onclick="toggleInquiryForm()">Inquire to Book</button>
       </div>
     </div>
     <div class="quote-error" id="quoteError" style="display: none;"></div>
+
+    <form class="inquiry-form" id="inquiryForm" onsubmit="submitInquiry(event)">
+      <div class="form-row">
+        <input type="text" class="form-input" id="guestName" placeholder="Your Full Name *" required>
+        <input type="email" class="form-input" id="guestEmail" placeholder="Your Email Address *" required>
+        <input type="tel" class="form-input" id="guestPhone" placeholder="Phone Number *" required>
+      </div>
+      <div class="form-submit-row">
+        <input type="text" class="form-input" id="guestNotes" placeholder="Optional notes or number of guests...">
+        <button type="submit" class="submit-btn" id="submitBtn">Send Booking Request</button>
+      </div>
+      <div class="form-status" id="formStatus"></div>
+    </form>
   </div>
 
   <div class="monthly-holidays" id="monthlyHolidays" style="display: none;"></div>
@@ -138,7 +159,7 @@
 <script>
   const rawData = [{"date": "2026-10-22", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-23", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-24", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-25", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-26", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-27", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-28", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-29", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-30", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-10-31", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-01", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-02", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-03", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-04", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-05", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-06", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-07", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-08", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-09", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-10", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-11", "price": "300", "min_stay": "2", "available": true, "holiday": "Veterans Day"}, {"date": "2026-11-12", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-13", "price": "321", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-14", "price": "327", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-15", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-16", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-17", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-18", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-19", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-20", "price": "381", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-21", "price": "398", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-22", "price": "384", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-23", "price": "402", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-24", "price": "402", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-25", "price": "600", "min_stay": "4", "available": true, "holiday": ""}, {"date": "2026-11-26", "price": "629", "min_stay": "4", "available": true, "holiday": "Thanksgiving"}, {"date": "2026-11-27", "price": "630", "min_stay": "4", "available": true, "holiday": ""}, {"date": "2026-11-28", "price": "580", "min_stay": "4", "available": true, "holiday": ""}, {"date": "2026-11-29", "price": "329", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-11-30", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-01", "price": "305", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-02", "price": "300", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-03", "price": "383", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-04", "price": "478", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-05", "price": "486", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-06", "price": "336", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-07", "price": "332", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-08", "price": "331", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-09", "price": "346", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-10", "price": "428", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-11", "price": "604", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-12", "price": "667", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-13", "price": "445", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-14", "price": "438", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-15", "price": "421", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-16", "price": "419", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-17", "price": "519", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-18", "price": "743", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2026-12-19", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2026-12-20", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2026-12-21", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2026-12-22", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2026-12-23", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2026-12-24", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2026-12-25", "price": "900", "min_stay": "3", "available": true, "holiday": "Christmas Day"}, {"date": "2026-12-26", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2026-12-27", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2026-12-28", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2026-12-29", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2026-12-30", "price": "900", "min_stay": "4", "available": false, "holiday": ""}, {"date": "2026-12-31", "price": "900", "min_stay": "4", "available": false, "holiday": ""}, {"date": "2027-01-01", "price": "900", "min_stay": "4", "available": false, "holiday": "New Year's Day"}, {"date": "2027-01-02", "price": "900", "min_stay": "4", "available": false, "holiday": ""}, {"date": "2027-01-03", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-04", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-05", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-06", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-07", "price": "748", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-08", "price": "880", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-09", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-10", "price": "711", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-11", "price": "595", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-12", "price": "601", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-13", "price": "614", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-14", "price": "773", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-15", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-01-16", "price": "900", "min_stay": "3", "available": false, "holiday": ""}, {"date": "2027-01-17", "price": "900", "min_stay": "3", "available": false, "holiday": ""}, {"date": "2027-01-18", "price": "797", "min_stay": "2", "available": false, "holiday": "MLK Jr. Day"}, {"date": "2027-01-19", "price": "556", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-20", "price": "447", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-21", "price": "651", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-22", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-23", "price": "900", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-01-24", "price": "671", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-25", "price": "772", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-26", "price": "780", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-27", "price": "816", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-28", "price": "819", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-29", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-30", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-01-31", "price": "738", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-01", "price": "559", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-02", "price": "567", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-03", "price": "591", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-04", "price": "868", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-05", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-06", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-07", "price": "868", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-08", "price": "683", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-09", "price": "668", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-10", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-11", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-12", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-13", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-14", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-15", "price": "900", "min_stay": "2", "available": true, "holiday": "Presidents' Day"}, {"date": "2027-02-16", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-17", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-18", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-19", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-20", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-21", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-22", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-23", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-24", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-25", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-02-26", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-27", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-02-28", "price": "685", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-01", "price": "610", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-02", "price": "610", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-03", "price": "890", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-04", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-05", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-06", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-07", "price": "684", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-08", "price": "608", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-09", "price": "608", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-10", "price": "625", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-11", "price": "897", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-12", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-13", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-14", "price": "731", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-15", "price": "632", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-16", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-17", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-18", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-19", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-20", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-21", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-22", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-23", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-24", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-25", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-26", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-03-27", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-03-28", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-03-29", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-30", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-03-31", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-01", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-02", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-03", "price": "900", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-04", "price": "810", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-05", "price": "755", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-06", "price": "759", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-07", "price": "779", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-08", "price": "857", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-09", "price": "725", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-10", "price": "637", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-11", "price": "538", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-12", "price": "567", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-13", "price": "552", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-14", "price": "543", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-15", "price": "587", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-16", "price": "645", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-17", "price": "557", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-18", "price": "441", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-19", "price": "383", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-20", "price": "377", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-21", "price": "386", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-22", "price": "428", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-23", "price": "507", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-24", "price": "472", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-25", "price": "383", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-26", "price": "396", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-27", "price": "395", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-28", "price": "389", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-29", "price": "386", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-04-30", "price": "441", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-01", "price": "420", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-02", "price": "384", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-03", "price": "379", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-04", "price": "329", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-05", "price": "346", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-06", "price": "356", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-07", "price": "408", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-08", "price": "394", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-09", "price": "355", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-10", "price": "346", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-11", "price": "347", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-12", "price": "355", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-13", "price": "379", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-14", "price": "431", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-15", "price": "423", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-16", "price": "380", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-17", "price": "358", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-18", "price": "343", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-19", "price": "356", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-20", "price": "364", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-21", "price": "404", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-22", "price": "405", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-23", "price": "370", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-24", "price": "351", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-25", "price": "328", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-26", "price": "382", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-27", "price": "383", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-05-28", "price": "604", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-05-29", "price": "614", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-05-30", "price": "613", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-05-31", "price": "394", "min_stay": "2", "available": true, "holiday": "Memorial Day"}, {"date": "2027-06-01", "price": "390", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-02", "price": "392", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-03", "price": "403", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-04", "price": "422", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-05", "price": "417", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-06", "price": "397", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-07", "price": "362", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-08", "price": "411", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-09", "price": "407", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-10", "price": "394", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-11", "price": "419", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-12", "price": "412", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-13", "price": "392", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-14", "price": "370", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-15", "price": "358", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-16", "price": "384", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-17", "price": "533", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-18", "price": "534", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-19", "price": "534", "min_stay": "2", "available": true, "holiday": "Juneteenth"}, {"date": "2027-06-20", "price": "437", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-21", "price": "426", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-22", "price": "455", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-23", "price": "469", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-24", "price": "579", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-25", "price": "661", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-26", "price": "715", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-27", "price": "533", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-28", "price": "516", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-29", "price": "412", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-06-30", "price": "440", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-01", "price": "598", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-02", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-03", "price": "900", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-04", "price": "900", "min_stay": "3", "available": true, "holiday": "4th of July"}, {"date": "2027-07-05", "price": "531", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-06", "price": "537", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-07", "price": "537", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-08", "price": "613", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-09", "price": "643", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-10", "price": "669", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-11", "price": "482", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-12", "price": "455", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-13", "price": "464", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-14", "price": "535", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-15", "price": "554", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-16", "price": "612", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-17", "price": "665", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-18", "price": "527", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-19", "price": "516", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-20", "price": "514", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-21", "price": "498", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-22", "price": "603", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-23", "price": "713", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-24", "price": "651", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-25", "price": "504", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-26", "price": "514", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-27", "price": "514", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-28", "price": "513", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-29", "price": "609", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-07-30", "price": "703", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-07-31", "price": "682", "min_stay": "3", "available": true, "holiday": ""}, {"date": "2027-08-01", "price": "515", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-02", "price": "495", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-03", "price": "495", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-04", "price": "495", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-05", "price": "554", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-06", "price": "588", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-07", "price": "609", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-08", "price": "495", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-09", "price": "516", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-10", "price": "507", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-11", "price": "495", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-12", "price": "529", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-13", "price": "557", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-14", "price": "524", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-15", "price": "399", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-16", "price": "377", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-17", "price": "365", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-18", "price": "374", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-19", "price": "429", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-20", "price": "503", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-21", "price": "532", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-22", "price": "454", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-23", "price": "356", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-24", "price": "347", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-25", "price": "344", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-26", "price": "403", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-27", "price": "452", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-28", "price": "487", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-29", "price": "420", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-30", "price": "356", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-08-31", "price": "340", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-01", "price": "346", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-02", "price": "389", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-03", "price": "766", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-04", "price": "766", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-05", "price": "765", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-06", "price": "398", "min_stay": "2", "available": true, "holiday": "Labor Day"}, {"date": "2027-09-07", "price": "398", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-08", "price": "398", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-09", "price": "412", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-10", "price": "474", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-11", "price": "458", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-12", "price": "420", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-13", "price": "344", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-14", "price": "346", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-15", "price": "366", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-16", "price": "417", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-17", "price": "471", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-18", "price": "458", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-19", "price": "353", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-20", "price": "337", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-21", "price": "340", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-22", "price": "356", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-23", "price": "387", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-24", "price": "472", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-25", "price": "472", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-26", "price": "396", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-27", "price": "343", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-28", "price": "339", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-29", "price": "353", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-09-30", "price": "388", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-01", "price": "446", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-02", "price": "462", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-03", "price": "381", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-04", "price": "338", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-05", "price": "340", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-06", "price": "331", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-07", "price": "378", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-08", "price": "448", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-09", "price": "452", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-10", "price": "459", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-11", "price": "335", "min_stay": "2", "available": true, "holiday": "Columbus Day"}, {"date": "2027-10-12", "price": "342", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-13", "price": "343", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-14", "price": "383", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-15", "price": "399", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-16", "price": "385", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-17", "price": "487", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-18", "price": "471", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-19", "price": "323", "min_stay": "2", "available": true, "holiday": ""}, {"date": "2027-10-20", "price": "323", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-10-21", "price": "361", "min_stay": "2", "available": false, "holiday": ""}, {"date": "2027-10-22", "price": "373", "min_stay": "2", "available": false, "holiday": ""}];
   const CLEANING_FEE = 250;
-  const BOOKING_EMAIL = "mammothcharm@gmail.com";
+  const WEB3FORMS_KEY = "323b43c5-dc22-4126-b48a-add7e5609c26";
   const dataMap = {};
   rawData.forEach(item => { dataMap[item.date] = item; });
 
@@ -147,6 +168,7 @@
 
   let checkInDate = null;
   let checkOutDate = null;
+  let activeQuoteSummary = {};
 
   function parseLocal(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -162,19 +184,18 @@
     const info = dataMap[dateStr];
     if (!info) return;
 
-    // 1. Starting a new selection or resetting an existing complete selection
     if (!checkInDate || (checkInDate && checkOutDate)) {
-      if (!info.available) return; // Check-in must be on an available night
+      if (!info.available) return;
       checkInDate = dateStr;
       checkOutDate = null;
       document.getElementById("promptText").innerText = "Check-In: " + formatDisplayDate(checkInDate) + " — Now click your Check-Out date.";
       document.getElementById("clearBtn").style.display = "inline-block";
       document.getElementById("quoteCard").style.display = "none";
+      document.getElementById("inquiryForm").style.display = "none";
       renderCalendar();
       return;
     }
 
-    // 2. Selecting Check-Out date
     if (checkInDate && !checkOutDate) {
       const clickedObj = parseLocal(dateStr);
       const startObj = parseLocal(checkInDate);
@@ -202,7 +223,61 @@
     document.getElementById("promptText").innerText = "💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.";
     document.getElementById("clearBtn").style.display = "none";
     document.getElementById("quoteCard").style.display = "none";
+    document.getElementById("inquiryForm").style.display = "none";
     renderCalendar();
+  }
+
+  function toggleInquiryForm() {
+    const form = document.getElementById("inquiryForm");
+    const status = document.getElementById("formStatus");
+    status.style.display = "none";
+    form.style.display = (form.style.display === "block") ? "none" : "block";
+  }
+
+  async function submitInquiry(e) {
+    e.preventDefault();
+    const btn = document.getElementById("submitBtn");
+    const status = document.getElementById("formStatus");
+    btn.disabled = true;
+    btn.innerText = "Sending...";
+
+    const payload = {
+      access_key: WEB3FORMS_KEY,
+      subject: `Direct Booking Inquiry: ${activeQuoteSummary.dates} — ${document.getElementById("guestName").value}`,
+      from_name: "Mammoth Charm Booking Calendar",
+      name: document.getElementById("guestName").value,
+      email: document.getElementById("guestEmail").value,
+      phone: document.getElementById("guestPhone").value,
+      requested_dates: activeQuoteSummary.dates,
+      total_nights: activeQuoteSummary.nights,
+      estimated_total: activeQuoteSummary.total,
+      rate_breakdown: activeQuoteSummary.breakdown,
+      guest_notes: document.getElementById("guestNotes").value || "None"
+    };
+
+    try {
+      const response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      status.style.display = "block";
+      if (response.status === 200) {
+        status.style.color = "#166534";
+        status.innerText = "✓ Inquiry Sent! We received your quote request and will email you shortly.";
+        document.getElementById("inquiryForm").reset();
+      } else {
+        status.style.color = "#be123c";
+        status.innerText = "⚠️ Error sending request: " + (result.message || "Please try again.");
+      }
+    } catch (err) {
+      status.style.display = "block";
+      status.style.color = "#be123c";
+      status.innerText = "⚠️ Network error. Please try again.";
+    }
+    btn.disabled = false;
+    btn.innerText = "Send Booking Request";
   }
 
   function calculateQuote() {
@@ -231,7 +306,7 @@
 
       const price = parseFloat(dayData.price);
       accommodationTotal += price;
-      breakdownLines.push(`• ${dKey}: $${price}`);
+      breakdownLines.push(`${dKey}: $${price}`);
       nights++;
       curr.setDate(curr.getDate() + 1);
     }
@@ -241,9 +316,10 @@
     const errorBox = document.getElementById("quoteError");
     const detailsBox = document.getElementById("quoteDetails");
     const totalBox = document.getElementById("quoteTotal");
-    const btn = document.getElementById("inquireBtn");
+    const inquiryForm = document.getElementById("inquiryForm");
 
     quoteCard.style.display = "block";
+    inquiryForm.style.display = "none";
 
     if (hasBlocked) {
       quoteGrid.style.display = "none";
@@ -263,7 +339,8 @@
     quoteGrid.style.display = "flex";
 
     const grandTotal = accommodationTotal + CLEANING_FEE;
-    document.getElementById("promptText").innerText = `Selected Stay: ${formatDisplayDate(checkInDate)} – ${formatDisplayDate(checkOutDate)} (${nights} nights)`;
+    const datesLabel = `${formatDisplayDate(checkInDate)} to ${formatDisplayDate(checkOutDate)}`;
+    document.getElementById("promptText").innerText = `Selected Stay: ${datesLabel} (${nights} nights)`;
 
     detailsBox.innerHTML = `
       <strong>${formatDisplayDate(checkInDate)} &rarr; ${formatDisplayDate(checkOutDate)}</strong> (${nights} Nights)<br>
@@ -271,34 +348,12 @@
     `;
     totalBox.innerText = `Total: $${grandTotal.toLocaleString()}`;
 
-    const subject = encodeURIComponent(`Direct Booking Inquiry: ${formatDisplayDate(checkInDate)} - ${formatDisplayDate(checkOutDate)} (Mammoth Charm)`);
-    const body = encodeURIComponent(
-      `Hi,
-
-I would like to inquire about booking Mammoth Charm for the following dates:
-
-` +
-      `Check-In: ${formatDisplayDate(checkInDate)}
-` +
-      `Check-Out: ${formatDisplayDate(checkOutDate)}
-` +
-      `Total Nights: ${nights}
-
-` +
-      `Nightly Rate Breakdown:
-${breakdownLines.join('\n')}
-
-` +
-      `Nightly Subtotal: $${accommodationTotal.toLocaleString()}
-` +
-      `Cleaning Fee: $${CLEANING_FEE}
-` +
-      `Estimated Total Quote: $${grandTotal.toLocaleString()}
-
-` +
-      `Please let me know how to finalize our reservation!`
-    );
-    btn.href = `mailto:${BOOKING_EMAIL}?subject=${subject}&body=${body}`;
+    activeQuoteSummary = {
+      dates: datesLabel,
+      nights: `${nights} Nights`,
+      total: `$${grandTotal.toLocaleString()} ($${accommodationTotal.toLocaleString()} Nightly Subtotal + $${CLEANING_FEE} Cleaning Fee)`,
+      breakdown: breakdownLines.join(" | ")
+    };
   }
 
   function renderCalendar() {
