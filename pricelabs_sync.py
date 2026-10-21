@@ -7,7 +7,7 @@ for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 3.6.0 (Built-In Direct Inquiry Form via Web3Forms + $250 Cleaning Fee)
+Version: 3.6.1 (Mandatory Number of Guests + Optional Notes in Inquiry Form)
 """
 
 import os
@@ -397,7 +397,7 @@ class HTMLCalendarBuilder:
   .quote-error {{ color: #be123c; font-size: 0.85rem; font-weight: 700; }}
 
   .inquiry-form {{ margin-top: 14px; padding-top: 14px; border-top: 1px solid #cbd5e1; display: none; }}
-  .form-row {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }}
+  .form-row {{ display: grid; grid-template-columns: 1.2fr 1.3fr 1fr 0.9fr; gap: 10px; margin-bottom: 10px; }}
   .form-input {{ width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 0.85rem; }}
   .form-submit-row {{ display: flex; gap: 10px; align-items: center; }}
   .submit-btn {{ background: #0f172a; color: #ffffff; border: none; font-weight: 700; font-size: 0.85rem; padding: 9px 18px; border-radius: 5px; cursor: pointer; white-space: nowrap; }}
@@ -409,7 +409,7 @@ class HTMLCalendarBuilder:
   .holiday-list {{ margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 12px 24px; }}
   .holiday-item {{ display: flex; align-items: center; gap: 6px; font-weight: 500; }}
 
-  @media (max-width: 600px) {{
+  @media (max-width: 650px) {{
     .cal-header {{ flex-direction: column; gap: 10px; align-items: flex-start; }}
     .day-cell {{ min-height: 60px; padding: 4px; }}
     .price {{ font-size: 0.85rem; }}
@@ -466,9 +466,10 @@ class HTMLCalendarBuilder:
         <input type="text" class="form-input" id="guestName" placeholder="Your Full Name *" required>
         <input type="email" class="form-input" id="guestEmail" placeholder="Your Email Address *" required>
         <input type="tel" class="form-input" id="guestPhone" placeholder="Phone Number *" required>
+        <input type="number" class="form-input" id="guestCount" placeholder="Number of Guests *" min="1" max="20" required>
       </div>
       <div class="form-submit-row">
-        <input type="text" class="form-input" id="guestNotes" placeholder="Optional notes or number of guests...">
+        <input type="text" class="form-input" id="guestNotes" placeholder="Optional notes or questions...">
         <button type="submit" class="submit-btn" id="submitBtn">Send Booking Request</button>
       </div>
       <div class="form-status" id="formStatus"></div>
@@ -570,6 +571,7 @@ class HTMLCalendarBuilder:
       name: document.getElementById("guestName").value,
       email: document.getElementById("guestEmail").value,
       phone: document.getElementById("guestPhone").value,
+      number_of_guests: document.getElementById("guestCount").value,
       requested_dates: activeQuoteSummary.dates,
       total_nights: activeQuoteSummary.nights,
       estimated_total: activeQuoteSummary.total,
