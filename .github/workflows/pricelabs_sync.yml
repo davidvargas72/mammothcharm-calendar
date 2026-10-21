@@ -3,7 +3,7 @@ name: PriceLabs Daily Pricing Sync
 on:
   schedule:
     # Runs daily at 14:00 UTC (7:00 AM PDT / 6:00 AM PST)
-    - cron: '0 */4 * * *'
+    - cron: '0 */1 * * *'
   workflow_dispatch:
 
 permissions:
