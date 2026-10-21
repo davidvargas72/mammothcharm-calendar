@@ -7,7 +7,7 @@ for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 3.5.0 (Interactive Click-to-Quote Calculator + $250 Cleaning Fee)
+Version: 3.6.0 (Built-In Direct Inquiry Form via Web3Forms + $250 Cleaning Fee)
 """
 
 import os
@@ -48,7 +48,9 @@ OUTPUT_DISCOUNTED_HTML = "calendar_discounted.html"
 TIMEZONE_STR = "America/Los_Angeles"
 DISCOUNT_MULTIPLIER = 0.75  # 25% reduction
 CLEANING_FEE = 250          # $250 flat cleaning fee per stay
-BOOKING_EMAIL = "mammothcharm@gmail.com"  # Direct booking inquiry recipient
+
+# Web3Forms Access Key (Delivers directly to davidvargas72@gmail.com)
+WEB3FORMS_ACCESS_KEY = "323b43c5-dc22-4126-b48a-add7e5609c26"
 
 
 # ---------------------------------------------------------------------------
@@ -306,10 +308,10 @@ class ICSCalendarBuilder:
 
 
 # ---------------------------------------------------------------------------
-# 3. Interactive HTML Calendar Grid Builder (With Stay Quote Calculator)
+# 3. Interactive HTML Calendar Grid Builder (With Built-In Inquiry Form)
 # ---------------------------------------------------------------------------
 class HTMLCalendarBuilder:
-    """Builds a standalone, responsive monthly HTML calendar grid with interactive quote calculator."""
+    """Builds a standalone, responsive monthly HTML calendar grid with built-in inquiry form."""
 
     def __init__(self, title: str):
         self.title = title
@@ -369,7 +371,6 @@ class HTMLCalendarBuilder:
   .day-cell.unavail {{ background: var(--bg-unavail); }}
   .day-cell.unavail.checkout-eligible {{ cursor: pointer; }}
 
-  /* Interactive Selection States */
   .day-cell.selected-endpoint {{ background: var(--header-bg) !important; color: var(--header-text) !important; }}
   .day-cell.selected-endpoint .price,
   .day-cell.selected-endpoint .min-stay,
@@ -385,17 +386,24 @@ class HTMLCalendarBuilder:
   .price {{ font-size: 1.05rem; font-weight: 800; color: var(--text-avail); display: block; }}
   .min-stay {{ font-size: 0.72rem; color: #334155; display: block; margin-top: 2px; font-weight: 600; }}
 
-  /* Quote Summary Box */
+  /* Quote Summary & Built-In Form */
   .quote-card {{ background: #f8fafc; border-top: 2px solid var(--header-bg); padding: 14px 18px; display: none; }}
   .quote-grid {{ display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }}
   .quote-details {{ font-size: 0.88rem; color: #334155; line-height: 1.5; }}
   .quote-right {{ text-align: right; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }}
   .quote-total {{ font-size: 1.3rem; font-weight: 800; color: #0f172a; }}
-  .quote-btn {{ background: var(--header-bg); color: var(--header-text); border: none; font-weight: 800; font-size: 0.88rem; padding: 10px 16px; border-radius: 6px; text-decoration: none; display: inline-block; cursor: pointer; transition: background 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+  .quote-btn {{ background: var(--header-bg); color: var(--header-text); border: none; font-weight: 800; font-size: 0.88rem; padding: 10px 16px; border-radius: 6px; cursor: pointer; transition: background 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
   .quote-btn:hover {{ background: #00a89a; }}
   .quote-error {{ color: #be123c; font-size: 0.85rem; font-weight: 700; }}
 
-  /* Bottom Holiday List */
+  .inquiry-form {{ margin-top: 14px; padding-top: 14px; border-top: 1px solid #cbd5e1; display: none; }}
+  .form-row {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }}
+  .form-input {{ width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 0.85rem; }}
+  .form-submit-row {{ display: flex; gap: 10px; align-items: center; }}
+  .submit-btn {{ background: #0f172a; color: #ffffff; border: none; font-weight: 700; font-size: 0.85rem; padding: 9px 18px; border-radius: 5px; cursor: pointer; white-space: nowrap; }}
+  .submit-btn:hover {{ background: #1e293b; }}
+  .form-status {{ font-size: 0.85rem; font-weight: 700; margin-top: 8px; display: none; }}
+
   .monthly-holidays {{ background: #f8fafc; padding: 12px 18px; font-size: 0.85rem; color: #334155; border-top: 1px solid #cbd5e1; }}
   .holiday-list-title {{ font-weight: 800; margin-bottom: 6px; color: #0f172a; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }}
   .holiday-list {{ margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 12px 24px; }}
@@ -409,6 +417,8 @@ class HTMLCalendarBuilder:
     .endpoint-badge {{ font-size: 0.52rem; padding: 1px 2px; }}
     .quote-grid {{ flex-direction: column; align-items: flex-start; }}
     .quote-right {{ width: 100%; justify-content: space-between; }}
+    .form-row {{ grid-template-columns: 1fr; }}
+    .form-submit-row {{ flex-direction: column; align-items: stretch; }}
     .monthly-holidays {{ padding: 10px 14px; }}
     .holiday-list {{ flex-direction: column; gap: 4px; }}
   }}
@@ -446,10 +456,23 @@ class HTMLCalendarBuilder:
       <div class="quote-details" id="quoteDetails"></div>
       <div class="quote-right">
         <div class="quote-total" id="quoteTotal"></div>
-        <a href="#" class="quote-btn" id="inquireBtn" target="_blank" rel="noopener">Inquire to Book</a>
+        <button type="button" class="quote-btn" id="inquireBtn" onclick="toggleInquiryForm()">Inquire to Book</button>
       </div>
     </div>
     <div class="quote-error" id="quoteError" style="display: none;"></div>
+
+    <form class="inquiry-form" id="inquiryForm" onsubmit="submitInquiry(event)">
+      <div class="form-row">
+        <input type="text" class="form-input" id="guestName" placeholder="Your Full Name *" required>
+        <input type="email" class="form-input" id="guestEmail" placeholder="Your Email Address *" required>
+        <input type="tel" class="form-input" id="guestPhone" placeholder="Phone Number *" required>
+      </div>
+      <div class="form-submit-row">
+        <input type="text" class="form-input" id="guestNotes" placeholder="Optional notes or number of guests...">
+        <button type="submit" class="submit-btn" id="submitBtn">Send Booking Request</button>
+      </div>
+      <div class="form-status" id="formStatus"></div>
+    </form>
   </div>
 
   <div class="monthly-holidays" id="monthlyHolidays" style="display: none;"></div>
@@ -458,7 +481,7 @@ class HTMLCalendarBuilder:
 <script>
   const rawData = {records_json};
   const CLEANING_FEE = {CLEANING_FEE};
-  const BOOKING_EMAIL = "{BOOKING_EMAIL}";
+  const WEB3FORMS_KEY = "{WEB3FORMS_ACCESS_KEY}";
   const dataMap = {{}};
   rawData.forEach(item => {{ dataMap[item.date] = item; }});
 
@@ -467,6 +490,7 @@ class HTMLCalendarBuilder:
 
   let checkInDate = null;
   let checkOutDate = null;
+  let activeQuoteSummary = {{}};
 
   function parseLocal(dateStr) {{
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -482,19 +506,18 @@ class HTMLCalendarBuilder:
     const info = dataMap[dateStr];
     if (!info) return;
 
-    // 1. Starting a new selection or resetting an existing complete selection
     if (!checkInDate || (checkInDate && checkOutDate)) {{
-      if (!info.available) return; // Check-in must be on an available night
+      if (!info.available) return;
       checkInDate = dateStr;
       checkOutDate = null;
       document.getElementById("promptText").innerText = "Check-In: " + formatDisplayDate(checkInDate) + " — Now click your Check-Out date.";
       document.getElementById("clearBtn").style.display = "inline-block";
       document.getElementById("quoteCard").style.display = "none";
+      document.getElementById("inquiryForm").style.display = "none";
       renderCalendar();
       return;
     }}
 
-    // 2. Selecting Check-Out date
     if (checkInDate && !checkOutDate) {{
       const clickedObj = parseLocal(dateStr);
       const startObj = parseLocal(checkInDate);
@@ -522,7 +545,61 @@ class HTMLCalendarBuilder:
     document.getElementById("promptText").innerText = "💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.";
     document.getElementById("clearBtn").style.display = "none";
     document.getElementById("quoteCard").style.display = "none";
+    document.getElementById("inquiryForm").style.display = "none";
     renderCalendar();
+  }}
+
+  function toggleInquiryForm() {{
+    const form = document.getElementById("inquiryForm");
+    const status = document.getElementById("formStatus");
+    status.style.display = "none";
+    form.style.display = (form.style.display === "block") ? "none" : "block";
+  }}
+
+  async function submitInquiry(e) {{
+    e.preventDefault();
+    const btn = document.getElementById("submitBtn");
+    const status = document.getElementById("formStatus");
+    btn.disabled = true;
+    btn.innerText = "Sending...";
+
+    const payload = {{
+      access_key: WEB3FORMS_KEY,
+      subject: `Direct Booking Inquiry: ${{activeQuoteSummary.dates}} — ${{document.getElementById("guestName").value}}`,
+      from_name: "Mammoth Charm Booking Calendar",
+      name: document.getElementById("guestName").value,
+      email: document.getElementById("guestEmail").value,
+      phone: document.getElementById("guestPhone").value,
+      requested_dates: activeQuoteSummary.dates,
+      total_nights: activeQuoteSummary.nights,
+      estimated_total: activeQuoteSummary.total,
+      rate_breakdown: activeQuoteSummary.breakdown,
+      guest_notes: document.getElementById("guestNotes").value || "None"
+    }};
+
+    try {{
+      const response = await fetch("https://api.web3forms.com/submit", {{
+        method: "POST",
+        headers: {{ "Content-Type": "application/json", "Accept": "application/json" }},
+        body: JSON.stringify(payload)
+      }});
+      const result = await response.json();
+      status.style.display = "block";
+      if (response.status === 200) {{
+        status.style.color = "#166534";
+        status.innerText = "✓ Inquiry Sent! We received your quote request and will email you shortly.";
+        document.getElementById("inquiryForm").reset();
+      }} else {{
+        status.style.color = "#be123c";
+        status.innerText = "⚠️ Error sending request: " + (result.message || "Please try again.");
+      }}
+    }} catch (err) {{
+      status.style.display = "block";
+      status.style.color = "#be123c";
+      status.innerText = "⚠️ Network error. Please try again.";
+    }}
+    btn.disabled = false;
+    btn.innerText = "Send Booking Request";
   }}
 
   function calculateQuote() {{
@@ -551,7 +628,7 @@ class HTMLCalendarBuilder:
 
       const price = parseFloat(dayData.price);
       accommodationTotal += price;
-      breakdownLines.push(`• ${{dKey}}: $${{price}}`);
+      breakdownLines.push(`${{dKey}}: $${{price}}`);
       nights++;
       curr.setDate(curr.getDate() + 1);
     }}
@@ -561,9 +638,10 @@ class HTMLCalendarBuilder:
     const errorBox = document.getElementById("quoteError");
     const detailsBox = document.getElementById("quoteDetails");
     const totalBox = document.getElementById("quoteTotal");
-    const btn = document.getElementById("inquireBtn");
+    const inquiryForm = document.getElementById("inquiryForm");
 
     quoteCard.style.display = "block";
+    inquiryForm.style.display = "none";
 
     if (hasBlocked) {{
       quoteGrid.style.display = "none";
@@ -583,7 +661,8 @@ class HTMLCalendarBuilder:
     quoteGrid.style.display = "flex";
 
     const grandTotal = accommodationTotal + CLEANING_FEE;
-    document.getElementById("promptText").innerText = `Selected Stay: ${{formatDisplayDate(checkInDate)}} – ${{formatDisplayDate(checkOutDate)}} (${{nights}} nights)`;
+    const datesLabel = `${{formatDisplayDate(checkInDate)}} to ${{formatDisplayDate(checkOutDate)}}`;
+    document.getElementById("promptText").innerText = `Selected Stay: ${{datesLabel}} (${{nights}} nights)`;
 
     detailsBox.innerHTML = `
       <strong>${{formatDisplayDate(checkInDate)}} &rarr; ${{formatDisplayDate(checkOutDate)}}</strong> (${{nights}} Nights)<br>
@@ -591,19 +670,12 @@ class HTMLCalendarBuilder:
     `;
     totalBox.innerText = `Total: $${{grandTotal.toLocaleString()}}`;
 
-    const subject = encodeURIComponent(`Direct Booking Inquiry: ${{formatDisplayDate(checkInDate)}} - ${{formatDisplayDate(checkOutDate)}} (Mammoth Charm)`);
-    const body = encodeURIComponent(
-      `Hi,\n\nI would like to inquire about booking Mammoth Charm for the following dates:\n\n` +
-      `Check-In: ${{formatDisplayDate(checkInDate)}}\n` +
-      `Check-Out: ${{formatDisplayDate(checkOutDate)}}\n` +
-      `Total Nights: ${{nights}}\n\n` +
-      `Nightly Rate Breakdown:\n${{breakdownLines.join('\\n')}}\n\n` +
-      `Nightly Subtotal: $${{accommodationTotal.toLocaleString()}}\n` +
-      `Cleaning Fee: $${{CLEANING_FEE}}\n` +
-      `Estimated Total Quote: $${{grandTotal.toLocaleString()}}\n\n` +
-      `Please let me know how to finalize our reservation!`
-    );
-    btn.href = `mailto:${{BOOKING_EMAIL}}?subject=${{subject}}&body=${{body}}`;
+    activeQuoteSummary = {{
+      dates: datesLabel,
+      nights: `${{nights}} Nights`,
+      total: `$${{grandTotal.toLocaleString()}} ($${{accommodationTotal.toLocaleString()}} Nightly Subtotal + $${{CLEANING_FEE}} Cleaning Fee)`,
+      breakdown: breakdownLines.join(" | ")
+    }};
   }}
 
   function renderCalendar() {{
