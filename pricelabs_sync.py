@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-PriceLabs Dynamic Pricing Calendar Automation
-=============================================
+PriceLabs Dynamic Pricing & Cleaner Turnover Calendar Automation
+================================================================
 Automates the extraction of PriceLabs dynamic pricing and minimum stay rules
 PLUS real-time booked/blocked dates directly from Airbnb's iCalendar (.ics) feed
-for Mammoth Charm LLC. Builds two RFC 5545 compliant iCalendar (.ics) feeds
-AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
+for Mammoth Charm LLC. Builds:
+  1. Two RFC 5545 compliant iCalendar (.ics) feeds
+  2. Two interactive guest HTML monthly calendar grids (Standard & 25% Discounted)
+  3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.1.0 (Orphan Gap Filtering + Last-Night Check-In Guard + Legend/Timestamp Polish)
+Version: 4.2.0 (Added Dedicated Cleaner Turnover Schedule Dashboard - cleaner.html)
 """
 
 import os
@@ -52,6 +54,7 @@ OUTPUT_DISCOUNTED_FILENAME = os.getenv("OUTPUT_DISCOUNTED_ICS_FILENAME", "pricel
 
 OUTPUT_STANDARD_HTML = "calendar.html"
 OUTPUT_DISCOUNTED_HTML = "calendar_discounted.html"
+OUTPUT_CLEANER_HTML = "cleaner.html"
 
 TIMEZONE_STR = "America/Los_Angeles"
 DISCOUNT_MULTIPLIER = 0.75  # 25% reduction
@@ -98,21 +101,28 @@ def calculate_us_holidays(year: int) -> Dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# 0. Direct Airbnb iCalendar (.ics) Availability Extractor
+# 0. Direct Airbnb iCalendar (.ics) Availability & Turnover Extractor
 # ---------------------------------------------------------------------------
 class AirbnbICalExtractor:
-    """Fetches and parses Airbnb's direct iCal feed to extract all booked/blocked dates."""
+    """
+    Fetches and parses Airbnb's direct iCal feed to extract:
+      1. blocked_dates: Set of YYYY-MM-DD strings where the night is occupied
+      2. event_blocks: List of individual reservation/block dicts with start & end dates
+         so back-to-back Same-Day Turnovers (DTEND == next DTSTART) are preserved.
+    """
 
     def __init__(self, ical_url: str):
         self.ical_url = ical_url
 
-    def fetch_blocked_dates(self) -> Set[str]:
+    def fetch_ical_data(self) -> Tuple[Set[str], List[Dict[str, str]]]:
         blocked_dates: Set[str] = set()
+        event_blocks: List[Dict[str, str]] = []
+
         if not self.ical_url:
-            return blocked_dates
+            return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.1; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2; +https://mammothcharm.com)"
         }
 
         try:
@@ -120,7 +130,7 @@ class AirbnbICalExtractor:
             response = requests.get(self.ical_url, headers=headers, timeout=20)
             if response.status_code != 200:
                 logger.warning(f"Airbnb iCal returned HTTP {response.status_code}. Falling back to PriceLabs availability.")
-                return blocked_dates
+                return blocked_dates, event_blocks
 
             # Unfold RFC 5545 multi-line fields
             raw_ics = response.text.replace("\r\n ", "").replace("\r\n\t", "").replace("\n ", "")
@@ -136,6 +146,15 @@ class AirbnbICalExtractor:
                     try:
                         start_date = datetime.strptime(start_str, "%Y%m%d").date()
                         end_date = datetime.strptime(end_str, "%Y%m%d").date()
+                        if end_date <= start_date:
+                            continue
+
+                        event_blocks.append({
+                            "start": start_date.strftime("%Y-%m-%d"),
+                            "end": end_date.strftime("%Y-%m-%d"),
+                            "label": "Booked"
+                        })
+
                         curr = start_date
                         # In iCal, DTEND is exclusive (morning of check-out)
                         while curr < end_date:
@@ -144,11 +163,14 @@ class AirbnbICalExtractor:
                     except ValueError:
                         continue
 
-            logger.info(f"Successfully parsed {len(blocked_dates)} booked/blocked nights directly from Airbnb iCal.")
+            event_blocks.sort(key=lambda x: (x["start"], x["end"]))
+            logger.info(
+                f"Successfully parsed {len(blocked_dates)} booked nights across {len(event_blocks)} reservation blocks from Airbnb iCal."
+            )
         except Exception as e:
             logger.warning(f"Failed to fetch Airbnb iCal ({e}). Falling back to PriceLabs availability.")
 
-        return blocked_dates
+        return blocked_dates, event_blocks
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +187,7 @@ class PriceLabsExtractor:
         self.pms = pms
         self.airbnb_blocked = airbnb_blocked or set()
 
-    def fetch_pricing(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def fetch_pricing(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Set[str]]:
         if not self.api_key:
             logger.warning("No PRICELABS_API_KEY set.")
             raise ValueError("Missing PriceLabs credentials.")
@@ -257,8 +279,8 @@ class PriceLabsExtractor:
 
     def _apply_orphan_gap_rules(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Detects contiguous available windows where NO date in the window can satisfy its
-        minimum stay requirement before the next unavailable date:
+        Guest-facing rule: Detects contiguous available windows where NO date in the window can
+        satisfy its minimum stay requirement before the next unavailable date:
         - If the window starts at index 0 (immediately touching past/unbookable dates, like Oct 22),
           removes those dates from the bookable list so they render white/unbookable.
         - If the window is between two future booked blocks, marks those dates as available=False
@@ -281,8 +303,6 @@ class PriceLabsExtractor:
             while j < n and records[j]["available"]:
                 j += 1
 
-            # Contiguous available run is records[i : j]
-            # Check if at least one date k in [i, j-1] has enough open nights (j - k) to meet its min_stay
             can_any_book = False
             for k in range(i, j):
                 try:
@@ -296,11 +316,9 @@ class PriceLabsExtractor:
 
             if not can_any_book:
                 if i == 0:
-                    # Touches unbookable past/today (e.g., Oct 22): remove so it renders white/gray
                     for k in range(i, j):
                         leading_remove_indices.add(k)
                 else:
-                    # Trapped between two future bookings: mark Unavailable (light pink)
                     for k in range(i, j):
                         records[k]["available"] = False
 
@@ -311,7 +329,7 @@ class PriceLabsExtractor:
 
         return records
 
-    def _normalize_records(self, raw_records: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def _normalize_records(self, raw_records: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Set[str]]:
         if ZoneInfo:
             today = datetime.now(ZoneInfo(TIMEZONE_STR)).date()
         else:
@@ -326,6 +344,7 @@ class PriceLabsExtractor:
 
         standard_records = []
         discounted_records = []
+        raw_booked_dates: Set[str] = set(self.airbnb_blocked)
 
         for r in raw_records:
             d_str = r.get("date")
@@ -337,10 +356,13 @@ class PriceLabsExtractor:
             except ValueError:
                 continue
 
+            is_avail = self._determine_availability(r, d_str)
+            if not is_avail:
+                raw_booked_dates.add(d_str)
+
             if d_obj < start_date or d_obj > end_date:
                 continue
 
-            is_avail = self._determine_availability(r, d_str)
             holiday_name = holiday_catalog.get(d_str, "")
 
             raw_price = r.get("price") or r.get("final_price") or r.get("recommended_price") or 0
@@ -373,7 +395,7 @@ class PriceLabsExtractor:
         standard_records = self._apply_orphan_gap_rules(standard_records)
         discounted_records = self._apply_orphan_gap_rules(discounted_records)
 
-        return standard_records, discounted_records
+        return standard_records, discounted_records, raw_booked_dates
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +457,7 @@ class ICSCalendarBuilder:
 
 
 # ---------------------------------------------------------------------------
-# 3. Interactive HTML Calendar Grid Builder (With Built-In Inquiry Form)
+# 3. Interactive Guest HTML Calendar Grid Builder (With Built-In Inquiry Form)
 # ---------------------------------------------------------------------------
 class HTMLCalendarBuilder:
     """Builds a standalone, responsive monthly HTML calendar grid with built-in inquiry form."""
@@ -683,7 +705,6 @@ class HTMLCalendarBuilder:
     return d.toLocaleDateString('en-US', {{ month: 'short', day: 'numeric', year: 'numeric' }});
   }}
 
-  // Helper to get the previous calendar date string (YYYY-MM-DD)
   function getPrevDateStr(dateStr) {{
     const d = parseLocal(dateStr);
     d.setDate(d.getDate() - 1);
@@ -693,11 +714,10 @@ class HTMLCalendarBuilder:
     return `${{y}}-${{m}}-${{day}}`;
   }}
 
-  // Returns {{ firstUnavailableDate, openNightsCount }} starting from checkInStr
   function getOpenWindowAfter(checkInStr) {{
     if (!checkInStr) return {{ firstUnavailableDate: null, openNightsCount: 0 }};
     const startObj = parseLocal(checkInStr);
-    let openNights = 1; // checkInStr itself is available
+    let openNights = 1;
     for (let i = 1; i <= 365; i++) {{
       const curr = new Date(startObj.getFullYear(), startObj.getMonth(), startObj.getDate() + i);
       const y = curr.getFullYear();
@@ -712,7 +732,6 @@ class HTMLCalendarBuilder:
     return {{ firstUnavailableDate: null, openNightsCount: openNights }};
   }}
 
-  // Evaluates whether a newly selected Check-In date has enough open nights before the next booking
   function validateCheckInSelection(dateStr) {{
     const info = dataMap[dateStr];
     const reqMin = parseInt(info.min_stay, 10) || 2;
@@ -925,7 +944,6 @@ class HTMLCalendarBuilder:
     
     let currentMonthHolidays = [];
 
-    // Only highlight the first unavailable date with a dashed outline if the open window meets min_stay
     let eligibleTurnaroundDate = null;
     if (checkInDate && !checkOutDate && dataMap[checkInDate]) {{
       const reqMin = parseInt(dataMap[checkInDate].min_stay, 10) || 2;
@@ -971,15 +989,12 @@ class HTMLCalendarBuilder:
       }} else if (!info.available) {{
         cell.className = "day-cell unavail";
 
-        // If previous night was available, upper-left is light green / lower-right is light pink
         if (prevInfo && prevInfo.available) {{
           cell.classList.add("turnaround-checkin-booked");
         }} else if (!prevInfo) {{
-          // If previous night is unbookable/past (like Oct 22 before Oct 23), upper-left is white/gray / lower-right is light pink
           cell.classList.add("turnaround-past-booked");
         }}
 
-        // If guest selected a valid Check-In date, highlight the eligible turnaround date with dashed border only
         if (dateStr === eligibleTurnaroundDate) {{
           cell.classList.add("checkout-eligible");
           cell.onclick = () => handleDayClick(dateStr);
@@ -993,7 +1008,6 @@ class HTMLCalendarBuilder:
         cell.className = "day-cell avail";
         cell.onclick = () => handleDayClick(dateStr);
 
-        // If previous night was booked, a guest is checking out this morning (upper-left pink / lower-right green)
         if (prevInfo && !prevInfo.available) {{
           cell.classList.add("turnaround-checkout-avail");
         }}
@@ -1046,14 +1060,493 @@ class HTMLCalendarBuilder:
 
 
 # ---------------------------------------------------------------------------
+# 4. Dedicated Cleaner Turnover Schedule Dashboard Builder (cleaner.html)
+# ---------------------------------------------------------------------------
+class CleanerCalendarBuilder:
+    """
+    Builds a standalone, read-only Cleaner Turnover Schedule dashboard (cleaner.html)
+    featuring:
+      - Section A: Upcoming Cleaning Windows summary list (Next 8 turnovers)
+      - Section B: Monthly Turnover Calendar Grid with Open, Booked, Check-In (4:00 PM),
+        Check-Out (10:00 AM), and High-Alert Same-Day Turnover (10a-4p) cells.
+    """
+
+    def __init__(self, title: str = "Mammoth Charm - Cleaning & Turnover Schedule"):
+        self.title = title
+
+    def _build_cleaner_dataset(
+        self,
+        event_blocks: List[Dict[str, str]],
+        raw_booked_dates: Set[str]
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        if ZoneInfo:
+            today = datetime.now(ZoneInfo(TIMEZONE_STR)).date()
+        else:
+            today = (datetime.utcnow() - timedelta(hours=7)).date()
+
+        start_window = datetime(today.year, today.month, 1).date()
+        end_window = today + timedelta(days=365)
+
+        holiday_catalog = {}
+        for y in range(today.year, today.year + 3):
+            holiday_catalog.update(calculate_us_holidays(y))
+
+        # If Airbnb iCal returned explicit VEVENT blocks, use them to preserve exact check-in/out boundaries.
+        # Otherwise, reconstruct contiguous blocks from raw_booked_dates.
+        blocks = list(event_blocks)
+        if not blocks and raw_booked_dates:
+            sorted_dates = sorted(list(raw_booked_dates))
+            b_start = sorted_dates[0]
+            prev_d = datetime.strptime(b_start, "%Y-%m-%d").date()
+            for d_str in sorted_dates[1:]:
+                curr_d = datetime.strptime(d_str, "%Y-%m-%d").date()
+                if (curr_d - prev_d).days > 1:
+                    blocks.append({
+                        "start": b_start,
+                        "end": (prev_d + timedelta(days=1)).strftime("%Y-%m-%d"),
+                        "label": "Booked"
+                    })
+                    b_start = d_str
+                prev_d = curr_d
+            blocks.append({
+                "start": b_start,
+                "end": (prev_d + timedelta(days=1)).strftime("%Y-%m-%d"),
+                "label": "Booked"
+            })
+
+        blocks.sort(key=lambda x: (x["start"], x["end"]))
+
+        checkin_dates: Set[str] = set()
+        checkout_dates: Set[str] = set()
+        occupied_nights: Set[str] = set(raw_booked_dates)
+
+        for b in blocks:
+            checkin_dates.add(b["start"])
+            checkout_dates.add(b["end"])
+            s_obj = datetime.strptime(b["start"], "%Y-%m-%d").date()
+            e_obj = datetime.strptime(b["end"], "%Y-%m-%d").date()
+            c_obj = s_obj
+            while c_obj < e_obj:
+                occupied_nights.add(c_obj.strftime("%Y-%m-%d"))
+                c_obj += timedelta(days=1)
+
+        # Build daily records for the monthly calendar grid
+        daily_records: List[Dict[str, Any]] = []
+        curr = start_window
+        while curr <= end_window:
+            d_str = curr.strftime("%Y-%m-%d")
+            is_in = d_str in checkin_dates
+            is_out = d_str in checkout_dates
+            is_occ = d_str in occupied_nights
+            is_past = curr < today
+
+            if is_in and is_out:
+                day_state = "SAME_DAY_TURNOVER"
+            elif is_in:
+                day_state = "CHECK_IN"
+            elif is_out and not is_occ:
+                day_state = "CHECK_OUT"
+            elif is_occ:
+                day_state = "BOOKED"
+            else:
+                day_state = "OPEN"
+
+            daily_records.append({
+                "date": d_str,
+                "state": day_state,
+                "is_past": is_past,
+                "holiday": holiday_catalog.get(d_str, "")
+            })
+            curr += timedelta(days=1)
+
+        # Build Upcoming Cleaning Windows summary list (next 8 turnovers starting >= today)
+        upcoming_windows: List[Dict[str, Any]] = []
+        for idx, b in enumerate(blocks):
+            co_str = b["end"]
+            co_date = datetime.strptime(co_str, "%Y-%m-%d").date()
+            if co_date < today:
+                continue
+
+            # Find the next check-in on or after this check-out
+            next_ci_str = None
+            for next_b in blocks[idx + 1:]:
+                if next_b["start"] >= co_str:
+                    next_ci_str = next_b["start"]
+                    break
+
+            if next_ci_str == co_str:
+                upcoming_windows.append({
+                    "type": "SAME_DAY",
+                    "checkout_date": co_str,
+                    "next_checkin_date": next_ci_str,
+                    "gap_days": 0
+                })
+            elif next_ci_str:
+                next_ci_date = datetime.strptime(next_ci_str, "%Y-%m-%d").date()
+                gap_days = (next_ci_date - co_date).days
+                upcoming_windows.append({
+                    "type": "WINDOW",
+                    "checkout_date": co_str,
+                    "next_checkin_date": next_ci_str,
+                    "gap_days": gap_days
+                })
+            else:
+                upcoming_windows.append({
+                    "type": "OPEN_ENDED",
+                    "checkout_date": co_str,
+                    "next_checkin_date": None,
+                    "gap_days": None
+                })
+
+            if len(upcoming_windows) >= 8:
+                break
+
+        return daily_records, upcoming_windows
+
+    def build_html(self, event_blocks: List[Dict[str, str]], raw_booked_dates: Set[str]) -> str:
+        daily_records, upcoming_windows = self._build_cleaner_dataset(event_blocks, raw_booked_dates)
+        records_json = json.dumps(daily_records)
+        windows_json = json.dumps(upcoming_windows)
+
+        if ZoneInfo:
+            now_local = datetime.now(ZoneInfo(TIMEZONE_STR))
+        else:
+            now_local = datetime.utcnow() - timedelta(hours=7)
+
+        date_part = now_local.strftime("%b %d, %Y")
+        time_part = now_local.strftime("%I:%M %p").lstrip("0").lower()
+        updated_str = f"{date_part} at {time_part}"
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{self.title}</title>
+<style>
+  :root {{
+    --bg-open: #dcfce7;
+    --border-open: #86efac;
+    --text-open: #166534;
+    --bg-booked: #ffe4e6;
+    --border-booked: #fda4af;
+    --text-booked: #9f1239;
+    --bg-turnover: #fef3c7;
+    --border-turnover: #f59e0b;
+    --text-turnover: #92400e;
+    --bg-past: #f8fafc;
+    --header-bg: #00c4b3;
+    --header-text: #0f172a;
+    --star-color: #d97706;
+  }}
+  * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+  body {{ margin: 0; padding: 0; background: transparent; color: #1e293b; overflow-x: hidden; width: 100%; }}
+
+  .dashboard-wrap {{ width: 100%; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }}
+
+  /* Section A: Upcoming Cleaning Windows Card */
+  .windows-card {{ border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
+  .windows-header {{ background: #0f172a; color: #ffffff; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }}
+  .windows-title {{ font-size: 1.05rem; font-weight: 800; margin: 0; letter-spacing: 0.02em; text-transform: uppercase; }}
+  .windows-sub {{ font-size: 0.78rem; color: #94a3b8; font-weight: 600; }}
+  .windows-list {{ padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }}
+  .window-row {{ display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; gap: 10px; flex-wrap: wrap; }}
+  .window-row.urgent {{ background: #fffbeb; border: 1.5px solid #f59e0b; }}
+  .win-badge {{ font-size: 0.72rem; font-weight: 800; padding: 4px 8px; border-radius: 4px; text-transform: uppercase; white-space: nowrap; }}
+  .win-badge.urgent {{ background: #f59e0b; color: #0f172a; }}
+  .win-badge.normal {{ background: var(--bg-open); color: var(--text-open); border: 1px solid var(--border-open); }}
+  .win-details {{ font-size: 0.86rem; color: #1e293b; font-weight: 600; flex: 1; min-width: 200px; }}
+  .win-meta {{ font-size: 0.78rem; color: #475569; font-weight: 700; white-space: nowrap; }}
+
+  /* Section B: Monthly Turnover Calendar Grid */
+  .cal-container {{ width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background: #ffffff; }}
+  .cal-header {{ display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: var(--header-bg); color: var(--header-text); }}
+  .cal-title {{ font-size: 1.35rem; font-weight: 800; margin: 0; color: var(--header-text); letter-spacing: -0.01em; }}
+  .nav-btns {{ display: flex; gap: 8px; align-items: center; }}
+  .nav-btn {{ background: #0f172a; border: none; color: #ffffff; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.88rem; transition: background 0.15s; white-space: nowrap; }}
+  .nav-btn:hover {{ background: #1e293b; }}
+
+  .legend {{ display: flex; gap: 10px; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; align-items: center; justify-content: space-between; flex-wrap: wrap; }}
+  .legend-items {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
+  .legend-pill {{ display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 4px; font-size: 0.76rem; font-weight: 700; }}
+  .pill-open {{ background: var(--bg-open); color: var(--text-open); border: 1px solid var(--border-open); }}
+  .pill-booked {{ background: var(--bg-booked); color: #be123c; border: 1px solid var(--border-booked); }}
+  .pill-turnover {{ background: var(--bg-turnover); color: var(--text-turnover); border: 1.5px solid var(--border-turnover); }}
+  .pill-holiday {{ background: transparent; color: var(--star-color); font-weight: 800; font-size: 0.8rem; padding: 0 2px; }}
+  .updated-label {{ color: #64748b; font-size: 0.74rem; font-weight: 500; }}
+
+  .weekdays {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: #f1f5f9; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 700; font-size: 0.8rem; padding: 8px 0; color: #334155; }}
+  .days-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: #cbd5e1; }}
+
+  .day-cell {{ min-height: 74px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; user-select: none; min-width: 0; overflow: hidden; }}
+  .day-cell.empty {{ background: var(--bg-past); }}
+  .day-cell.past-day {{ opacity: 0.52; }}
+
+  .day-cell.state-open {{ background: var(--bg-open); }}
+  .day-cell.state-booked {{ background: var(--bg-booked); }}
+  .day-cell.state-checkin {{ background: linear-gradient(135deg, var(--bg-open) 50%, var(--bg-booked) 50%); }}
+  .day-cell.state-checkout {{ background: linear-gradient(135deg, var(--bg-booked) 50%, var(--bg-open) 50%); }}
+  .day-cell.state-turnover {{
+    background: var(--bg-turnover);
+    outline: 2.5px solid var(--border-turnover);
+    outline-offset: -2.5px;
+  }}
+
+  .day-top {{ display: flex; justify-content: space-between; align-items: flex-start; width: 100%; height: 16px; }}
+  .holiday-star {{ font-size: 1rem; color: var(--star-color); line-height: 1; }}
+  .day-num {{ font-size: 0.85rem; font-weight: 700; text-align: right; color: #334155; margin-left: auto; line-height: 1; }}
+
+  .day-content {{ text-align: center; margin: auto 0; width: 100%; }}
+  .cell-badge {{ font-size: 0.64rem; font-weight: 800; text-transform: uppercase; padding: 2px 5px; border-radius: 3px; display: inline-block; white-space: nowrap; letter-spacing: 0.02em; }}
+  .badge-open {{ color: var(--text-open); font-size: 0.7rem; }}
+  .badge-booked {{ color: var(--text-booked); font-size: 0.7rem; }}
+  .badge-in {{ background: #0f172a; color: #ffffff; }}
+  .badge-out {{ background: #0f766e; color: #ffffff; }}
+  .badge-turnover {{ background: #d97706; color: #ffffff; font-size: 0.58rem; padding: 2px 4px; }}
+
+  .monthly-holidays {{ background: #f8fafc; padding: 12px 18px; font-size: 0.85rem; color: #334155; border-top: 1px solid #cbd5e1; }}
+  .holiday-list-title {{ font-weight: 800; margin-bottom: 6px; color: #0f172a; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }}
+  .holiday-list {{ margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 12px 24px; }}
+  .holiday-item {{ display: flex; align-items: center; gap: 6px; font-weight: 500; }}
+
+  @media (max-width: 650px) {{
+    .windows-header {{ padding: 10px 12px; }}
+    .windows-title {{ font-size: 0.92rem; }}
+    .windows-sub {{ font-size: 0.7rem; }}
+    .windows-list {{ padding: 10px; gap: 6px; }}
+    .window-row {{ padding: 8px 10px; gap: 6px; }}
+    .win-badge {{ font-size: 0.64rem; padding: 3px 6px; }}
+    .win-details {{ font-size: 0.78rem; min-width: 100%; }}
+    .win-meta {{ font-size: 0.72rem; }}
+
+    .cal-header {{ padding: 10px 12px; gap: 6px; }}
+    .cal-title {{ font-size: 1.05rem; }}
+    .nav-btns {{ gap: 4px; }}
+    .nav-btn {{ padding: 6px 9px; font-size: 0.74rem; border-radius: 5px; }}
+    .legend {{ padding: 8px 10px; gap: 6px; }}
+    .legend-items {{ gap: 5px; }}
+    .legend-pill {{ padding: 3px 6px; font-size: 0.65rem; }}
+    .pill-holiday {{ font-size: 0.7rem; }}
+    .updated-label {{ font-size: 0.65rem; width: 100%; }}
+    .weekdays {{ font-size: 0.68rem; padding: 5px 0; }}
+    .day-cell {{ min-height: 52px; padding: 3px 2px; }}
+    .day-top {{ height: 12px; }}
+    .holiday-star {{ font-size: 0.72rem; }}
+    .day-num {{ font-size: 0.68rem; }}
+    .cell-badge {{ font-size: 0.45rem; padding: 1px 2px; letter-spacing: -0.01em; }}
+    .badge-open, .badge-booked {{ font-size: 0.52rem; }}
+    .badge-turnover {{ font-size: 0.42rem; padding: 1px 2px; }}
+    .monthly-holidays {{ padding: 8px 10px; font-size: 0.74rem; }}
+    .holiday-list-title {{ font-size: 0.68rem; margin-bottom: 4px; }}
+    .holiday-list {{ flex-direction: column; gap: 3px; }}
+  }}
+</style>
+</head>
+<body>
+<div class="dashboard-wrap">
+
+  <!-- Section A: Upcoming Cleaning Windows -->
+  <div class="windows-card">
+    <div class="windows-header">
+      <h2 class="windows-title">🧹 Upcoming Cleaning Windows</h2>
+      <span class="windows-sub">Check-Out: 10:00 AM &bull; Check-In: 4:00 PM</span>
+    </div>
+    <div class="windows-list" id="windowsList"></div>
+  </div>
+
+  <!-- Section B: Monthly Turnover Calendar -->
+  <div class="cal-container">
+    <div class="cal-header">
+      <h2 class="cal-title" id="monthLabel">Loading...</h2>
+      <div class="nav-btns">
+        <button class="nav-btn" onclick="changeMonth(-1)">&#8592; Prev</button>
+        <button class="nav-btn" onclick="goToday()">Today</button>
+        <button class="nav-btn" onclick="changeMonth(1)">Next &#8594;</button>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-items">
+        <span class="legend-pill pill-open">Open (Available to Clean)</span>
+        <span class="legend-pill pill-booked">Booked</span>
+        <span class="legend-pill pill-turnover">⚡ Turnover (10a–4p)</span>
+        <span class="pill-holiday">★ US Holiday</span>
+      </div>
+      <span class="updated-label">Updated: {updated_str}</span>
+    </div>
+    <div class="weekdays">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+    <div class="days-grid" id="daysGrid"></div>
+    <div class="monthly-holidays" id="monthlyHolidays" style="display: none;"></div>
+  </div>
+
+</div>
+
+<script>
+  const rawData = {records_json};
+  const upcomingWindows = {windows_json};
+  const dataMap = {{}};
+  rawData.forEach(item => {{ dataMap[item.date] = item; }});
+
+  let current = new Date();
+  current.setDate(1);
+
+  function parseLocal(dateStr) {{
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }}
+
+  function formatShortDate(dateStr) {{
+    const d = parseLocal(dateStr);
+    return d.toLocaleDateString('en-US', {{ weekday: 'short', month: 'short', day: 'numeric' }});
+  }}
+
+  function renderWindowsList() {{
+    const container = document.getElementById("windowsList");
+    if (!upcomingWindows || upcomingWindows.length === 0) {{
+      container.innerHTML = `<div class="window-row"><div class="win-details">No upcoming check-outs currently scheduled.</div></div>`;
+      return;
+    }}
+
+    container.innerHTML = upcomingWindows.map(w => {{
+      if (w.type === "SAME_DAY") {{
+        return `
+          <div class="window-row urgent">
+            <span class="win-badge urgent">⚡ SAME-DAY TURNOVER</span>
+            <div class="win-details">
+              <strong>${{formatShortDate(w.checkout_date)}}</strong> &mdash; Clean between <strong>10:00 AM &ndash; 4:00 PM</strong>
+            </div>
+            <span class="win-meta">Next Guest In Today @ 4:00 PM</span>
+          </div>
+        `;
+      }} else if (w.type === "WINDOW") {{
+        const dayWord = w.gap_days === 1 ? "Day" : "Days";
+        return `
+          <div class="window-row">
+            <span class="win-badge normal">🧹 ${{w.gap_days}}-${{dayWord.toUpperCase()}} WINDOW</span>
+            <div class="win-details">
+              <strong>Out:</strong> ${{formatShortDate(w.checkout_date)}} (10:00 AM) &rarr; <strong>Next In:</strong> ${{formatShortDate(w.next_checkin_date)}} (4:00 PM)
+            </div>
+            <span class="win-meta">${{w.gap_days}} ${{dayWord}} Available to Clean</span>
+          </div>
+        `;
+      }} else {{
+        return `
+          <div class="window-row">
+            <span class="win-badge normal">🧹 OPEN WINDOW</span>
+            <div class="win-details">
+              <strong>Out:</strong> ${{formatShortDate(w.checkout_date)}} (10:00 AM) &rarr; Open calendar afterward
+            </div>
+            <span class="win-meta">Flexible Clean</span>
+          </div>
+        `;
+      }}
+    }}).join("");
+  }}
+
+  function renderCalendar() {{
+    const year = current.getFullYear();
+    const month = current.getMonth();
+    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    document.getElementById("monthLabel").innerText = monthNames[month] + " " + year;
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const grid = document.getElementById("daysGrid");
+    grid.innerHTML = "";
+
+    let currentMonthHolidays = [];
+
+    for (let i = 0; i < firstDay; i++) {{
+      const empty = document.createElement("div");
+      empty.className = "day-cell empty";
+      grid.appendChild(empty);
+    }}
+
+    for (let d = 1; d <= daysInMonth; d++) {{
+      const cell = document.createElement("div");
+      const mm = String(month + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const dateStr = `${{year}}-${{mm}}-${{dd}}`;
+      const info = dataMap[dateStr];
+
+      let starHtml = "";
+      let contentHtml = "";
+
+      if (info && info.holiday) {{
+        starHtml = `<span class="holiday-star" title="${{info.holiday}}">★</span>`;
+        currentMonthHolidays.push({{ day: d, name: info.holiday }});
+      }}
+
+      if (!info) {{
+        cell.className = "day-cell empty";
+      }} else {{
+        cell.className = "day-cell";
+        if (info.is_past) {{
+          cell.classList.add("past-day");
+        }}
+
+        if (info.state === "SAME_DAY_TURNOVER") {{
+          cell.classList.add("state-turnover");
+          contentHtml = `<div class="day-content"><span class="cell-badge badge-turnover">TURNOVER (10a–4p)</span></div>`;
+        }} else if (info.state === "CHECK_IN") {{
+          cell.classList.add("state-checkin");
+          contentHtml = `<div class="day-content"><span class="cell-badge badge-in">IN 4:00 PM</span></div>`;
+        }} else if (info.state === "CHECK_OUT") {{
+          cell.classList.add("state-checkout");
+          contentHtml = `<div class="day-content"><span class="cell-badge badge-out">OUT 10:00 AM</span></div>`;
+        }} else if (info.state === "BOOKED") {{
+          cell.classList.add("state-booked");
+          contentHtml = `<div class="day-content"><span class="cell-badge badge-booked">BOOKED</span></div>`;
+        }} else {{
+          cell.classList.add("state-open");
+          contentHtml = `<div class="day-content"><span class="cell-badge badge-open">OPEN</span></div>`;
+        }}
+      }}
+
+      cell.innerHTML = `<div class="day-top">${{starHtml}}<span class="day-num">${{d}}</span></div>${{contentHtml}}`;
+      grid.appendChild(cell);
+    }}
+
+    const holidayContainer = document.getElementById("monthlyHolidays");
+    if (currentMonthHolidays.length > 0) {{
+      let listHtml = currentMonthHolidays.map(h =>
+        `<li class="holiday-item"><span style="color:var(--star-color);">★</span> ${{monthNames[month]}} ${{h.day}}: ${{h.name}}</li>`
+      ).join("");
+      holidayContainer.innerHTML = `<div class="holiday-list-title">${{monthNames[month]}} Holidays</div><ul class="holiday-list">${{listHtml}}</ul>`;
+      holidayContainer.style.display = "block";
+    }} else {{
+      holidayContainer.style.display = "none";
+    }}
+  }}
+
+  function changeMonth(delta) {{
+    current.setMonth(current.getMonth() + delta);
+    renderCalendar();
+  }}
+
+  function goToday() {{
+    current = new Date();
+    current.setDate(1);
+    renderCalendar();
+  }}
+
+  renderWindowsList();
+  renderCalendar();
+</script>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
 # Main Execution Pipeline
 # ---------------------------------------------------------------------------
 def main():
-    logger.info("=== Starting PriceLabs + Airbnb iCal Calendar Sync ===")
+    logger.info("=== Starting PriceLabs + Airbnb iCal + Cleaner Schedule Sync ===")
 
-    # 1. Fetch live blocked/booked nights directly from Airbnb iCal
+    # 1. Fetch live blocked/booked nights & explicit reservation blocks directly from Airbnb iCal
     airbnb_extractor = AirbnbICalExtractor(ical_url=AIRBNB_ICAL_URL)
-    airbnb_blocked_dates = airbnb_extractor.fetch_blocked_dates()
+    airbnb_blocked_dates, airbnb_event_blocks = airbnb_extractor.fetch_ical_data()
 
     # 2. Fetch rates and min-stays from PriceLabs, overriding availability with Airbnb iCal
     extractor = PriceLabsExtractor(
@@ -1062,8 +1555,9 @@ def main():
         pms=PRICELABS_PMS_NAME,
         airbnb_blocked=airbnb_blocked_dates
     )
-    standard_records, discounted_records = extractor.fetch_pricing()
+    standard_records, discounted_records, raw_booked_dates = extractor.fetch_pricing()
 
+    # 3. Build RFC 5545 iCalendar (.ics) feeds
     std_builder = ICSCalendarBuilder(calendar_name="PriceLabs")
     std_ics = std_builder.build_ics(standard_records, uid_prefix="pricelabs-std")
     with open(OUTPUT_STANDARD_FILENAME, "w", encoding="utf-8") as f:
@@ -1074,6 +1568,7 @@ def main():
     with open(OUTPUT_DISCOUNTED_FILENAME, "w", encoding="utf-8") as f:
         f.write(disc_ics)
 
+    # 4. Build Guest HTML Calendars (Standard & 25% Discounted)
     std_html_builder = HTMLCalendarBuilder(title="Mammoth Charm - Rates & Availability")
     with open(OUTPUT_STANDARD_HTML, "w", encoding="utf-8") as f:
         f.write(std_html_builder.build_html(standard_records))
@@ -1082,7 +1577,12 @@ def main():
     with open(OUTPUT_DISCOUNTED_HTML, "w", encoding="utf-8") as f:
         f.write(disc_html_builder.build_html(discounted_records))
 
-    logger.info("=== PriceLabs + Airbnb Calendar Sync Finished Successfully ===")
+    # 5. Build Dedicated Cleaner Turnover Schedule Dashboard (cleaner.html)
+    cleaner_html_builder = CleanerCalendarBuilder(title="Mammoth Charm - Cleaning & Turnover Schedule")
+    with open(OUTPUT_CLEANER_HTML, "w", encoding="utf-8") as f:
+        f.write(cleaner_html_builder.build_html(airbnb_event_blocks, raw_booked_dates))
+
+    logger.info("=== All Guest & Cleaner Calendars Synced Successfully ===")
 
 
 if __name__ == "__main__":
