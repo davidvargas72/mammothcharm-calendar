@@ -7,7 +7,7 @@ for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 3.6.1 (Mandatory Number of Guests + Optional Notes in Inquiry Form)
+Version: 3.6.2 (Updated 24-Hour Confirmation Message + Mandatory Guest Count)
 """
 
 import os
@@ -589,7 +589,7 @@ class HTMLCalendarBuilder:
       status.style.display = "block";
       if (response.status === 200) {{
         status.style.color = "#166534";
-        status.innerText = "✓ Inquiry Sent! We received your quote request and will email you shortly.";
+        status.innerText = "✓ Booking inquiry sent! We will get back to you within 24 hours.";
         document.getElementById("inquiryForm").reset();
       }} else {{
         status.style.color = "#be123c";
