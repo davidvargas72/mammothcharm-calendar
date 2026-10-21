@@ -47,9 +47,31 @@
   .day-cell.avail { background: var(--bg-avail); cursor: pointer; }
   .day-cell.avail:hover { filter: brightness(0.96); }
   .day-cell.unavail { background: var(--bg-unavail); }
-  .day-cell.unavail.checkout-eligible { cursor: pointer; }
 
-  .day-cell.selected-endpoint { background: var(--header-bg) !important; color: var(--header-text) !important; }
+  /* Subtle Turnaround Check-Out Only Indicator */
+  .day-cell.unavail.checkout-eligible {
+    cursor: pointer;
+    background: linear-gradient(135deg, #ccfbf1 0%, #ffe4e6 65%) !important;
+    outline: 2px dashed #00c4b3;
+    outline-offset: -2px;
+  }
+  .day-cell.unavail.checkout-eligible:hover {
+    filter: brightness(0.96);
+  }
+  .checkout-only-badge {
+    font-size: 0.62rem;
+    font-weight: 800;
+    color: #0f766e;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #5eead4;
+    padding: 2px 5px;
+    border-radius: 3px;
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .day-cell.selected-endpoint { background: var(--header-bg) !important; color: var(--header-text) !important; outline: none !important; }
   .day-cell.selected-endpoint .price,
   .day-cell.selected-endpoint .min-stay,
   .day-cell.selected-endpoint .day-num { color: var(--header-text) !important; }
@@ -93,6 +115,7 @@
     .price { font-size: 0.85rem; }
     .min-stay { font-size: 0.62rem; }
     .endpoint-badge { font-size: 0.52rem; padding: 1px 2px; }
+    .checkout-only-badge { font-size: 0.5rem; padding: 1px 3px; }
     .quote-grid { flex-direction: column; align-items: flex-start; }
     .quote-right { width: 100%; justify-content: space-between; }
     .form-row { grid-template-columns: 1fr; }
@@ -179,6 +202,23 @@
   function formatDisplayDate(dateStr) {
     const d = parseLocal(dateStr);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  // Finds the very first booked date after checkInStr (the only booked date eligible for morning check-out)
+  function getFirstBookedAfter(checkInStr) {
+    if (!checkInStr) return null;
+    let curr = parseLocal(checkInStr);
+    for (let i = 0; i < 365; i++) {
+      curr.setDate(curr.getDate() + 1);
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, '0');
+      const d = String(curr.getDate()).padStart(2, '0');
+      const dKey = `${y}-${m}-${d}`;
+      const dayInfo = dataMap[dKey];
+      if (!dayInfo) return null;
+      if (!dayInfo.available) return dKey;
+    }
+    return null;
   }
 
   function handleDayClick(dateStr) {
@@ -370,6 +410,7 @@
     grid.innerHTML = "";
     
     let currentMonthHolidays = [];
+    const eligibleTurnaroundDate = (checkInDate && !checkOutDate) ? getFirstBookedAfter(checkInDate) : null;
 
     for (let i = 0; i < firstDay; i++) {
       const empty = document.createElement("div");
@@ -405,9 +446,10 @@
         cell.className = "day-cell empty";
       } else if (!info.available) {
         cell.className = "day-cell unavail";
-        if (checkInDate && !checkOutDate && parseLocal(dateStr) > parseLocal(checkInDate)) {
+        if (dateStr === eligibleTurnaroundDate) {
           cell.classList.add("checkout-eligible");
           cell.onclick = () => handleDayClick(dateStr);
+          contentHtml = `<div class="day-content"><span class="checkout-only-badge">Check-Out Only</span></div>`;
         }
         if (isCheckOut) {
           cell.classList.add("selected-endpoint");
