@@ -164,7 +164,7 @@
       <span class="legend-pill pill-unavail">Unavailable</span>
       <span class="pill-holiday">★ US Holiday</span>
     </div>
-    <span class="updated-label">Updated: Oct 21, 2026 at 2:22 pm</span>
+    <span class="updated-label">Updated: Oct 21, 2026 at 2:43 pm</span>
   </div>
   <div class="quote-prompt">
     <span id="promptText">💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
@@ -227,7 +227,6 @@
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // Helper to get the previous calendar date string (YYYY-MM-DD)
   function getPrevDateStr(dateStr) {
     const d = parseLocal(dateStr);
     d.setDate(d.getDate() - 1);
@@ -237,11 +236,10 @@
     return `${y}-${m}-${day}`;
   }
 
-  // Returns { firstUnavailableDate, openNightsCount } starting from checkInStr
   function getOpenWindowAfter(checkInStr) {
     if (!checkInStr) return { firstUnavailableDate: null, openNightsCount: 0 };
     const startObj = parseLocal(checkInStr);
-    let openNights = 1; // checkInStr itself is available
+    let openNights = 1;
     for (let i = 1; i <= 365; i++) {
       const curr = new Date(startObj.getFullYear(), startObj.getMonth(), startObj.getDate() + i);
       const y = curr.getFullYear();
@@ -256,7 +254,6 @@
     return { firstUnavailableDate: null, openNightsCount: openNights };
   }
 
-  // Evaluates whether a newly selected Check-In date has enough open nights before the next booking
   function validateCheckInSelection(dateStr) {
     const info = dataMap[dateStr];
     const reqMin = parseInt(info.min_stay, 10) || 2;
@@ -469,7 +466,6 @@
     
     let currentMonthHolidays = [];
 
-    // Only highlight the first unavailable date with a dashed outline if the open window meets min_stay
     let eligibleTurnaroundDate = null;
     if (checkInDate && !checkOutDate && dataMap[checkInDate]) {
       const reqMin = parseInt(dataMap[checkInDate].min_stay, 10) || 2;
@@ -515,15 +511,12 @@
       } else if (!info.available) {
         cell.className = "day-cell unavail";
 
-        // If previous night was available, upper-left is light green / lower-right is light pink
         if (prevInfo && prevInfo.available) {
           cell.classList.add("turnaround-checkin-booked");
         } else if (!prevInfo) {
-          // If previous night is unbookable/past (like Oct 22 before Oct 23), upper-left is white/gray / lower-right is light pink
           cell.classList.add("turnaround-past-booked");
         }
 
-        // If guest selected a valid Check-In date, highlight the eligible turnaround date with dashed border only
         if (dateStr === eligibleTurnaroundDate) {
           cell.classList.add("checkout-eligible");
           cell.onclick = () => handleDayClick(dateStr);
@@ -537,7 +530,6 @@
         cell.className = "day-cell avail";
         cell.onclick = () => handleDayClick(dateStr);
 
-        // If previous night was booked, a guest is checking out this morning (upper-left pink / lower-right green)
         if (prevInfo && !prevInfo.available) {
           cell.classList.add("turnaround-checkout-avail");
         }
