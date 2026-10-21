@@ -7,7 +7,7 @@ for Mammoth Charm LLC, builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 3.4.0 (Mobile UX: No Unavailable text, Gold Star Holidays, Bottom List, No Scrollbars)
+Version: 3.5.0 (Interactive Click-to-Quote Calculator + $250 Cleaning Fee)
 """
 
 import os
@@ -47,6 +47,8 @@ OUTPUT_DISCOUNTED_HTML = "calendar_discounted.html"
 
 TIMEZONE_STR = "America/Los_Angeles"
 DISCOUNT_MULTIPLIER = 0.75  # 25% reduction
+CLEANING_FEE = 250          # $250 flat cleaning fee per stay
+BOOKING_EMAIL = "mammothcharm@gmail.com"  # Direct booking inquiry recipient
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +193,7 @@ class PriceLabsExtractor:
 
         start_date = today + timedelta(days=1)
         end_date = start_date + timedelta(days=365)
-        
+
         holiday_catalog = {}
         for y in range(today.year, today.year + 3):
             holiday_catalog.update(calculate_us_holidays(y))
@@ -269,7 +271,8 @@ class ICSCalendarBuilder:
 
         for item in pricing_records:
             d_str = item.get("date")
-            if not d_str: continue
+            if not d_str:
+                continue
 
             d_obj = datetime.strptime(d_str, "%Y-%m-%d").date()
             dtstart = d_obj.strftime("%Y%m%d")
@@ -303,10 +306,10 @@ class ICSCalendarBuilder:
 
 
 # ---------------------------------------------------------------------------
-# 3. Interactive HTML Calendar Grid Builder 
+# 3. Interactive HTML Calendar Grid Builder (With Stay Quote Calculator)
 # ---------------------------------------------------------------------------
 class HTMLCalendarBuilder:
-    """Builds a standalone, responsive monthly HTML calendar grid."""
+    """Builds a standalone, responsive monthly HTML calendar grid with interactive quote calculator."""
 
     def __init__(self, title: str):
         self.title = title
@@ -334,7 +337,6 @@ class HTMLCalendarBuilder:
   }}
   * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
   
-  /* Removed padding/margins to kill scrollbars */
   body {{ margin: 0; padding: 0; background: transparent; color: #1e293b; overflow-x: hidden; }}
   
   .cal-container {{ max-width: 900px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background: #ffffff; }}
@@ -353,15 +355,28 @@ class HTMLCalendarBuilder:
   .pill-holiday {{ background: transparent; color: var(--star-color); font-weight: 800; font-size: 0.85rem; padding: 0; }}
   .updated-label {{ color: #64748b; font-size: 0.75rem; font-weight: 500; }}
 
+  .quote-prompt {{ background: #f0fdfa; border-bottom: 1px solid #ccfbf1; padding: 7px 18px; font-size: 0.8rem; font-weight: 600; color: #0f766e; display: flex; justify-content: space-between; align-items: center; }}
+  .clear-btn {{ background: transparent; border: 1px solid #0f766e; color: #0f766e; border-radius: 4px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: none; }}
+  .clear-btn:hover {{ background: #ccfbf1; }}
+
   .weekdays {{ display: grid; grid-template-columns: repeat(7, 1fr); background: #f1f5f9; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 700; font-size: 0.8rem; padding: 8px 0; color: #334155; }}
   .days-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #cbd5e1; }}
   
-  /* Reduced min-height since we removed long text */
-  .day-cell {{ min-height: 75px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; }}
+  .day-cell {{ min-height: 75px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; transition: background 0.12s; user-select: none; }}
   .day-cell.empty {{ background: #f8fafc; }}
-  .day-cell.avail {{ background: var(--bg-avail); }}
+  .day-cell.avail {{ background: var(--bg-avail); cursor: pointer; }}
+  .day-cell.avail:hover {{ filter: brightness(0.96); }}
   .day-cell.unavail {{ background: var(--bg-unavail); }}
-  
+  .day-cell.unavail.checkout-eligible {{ cursor: pointer; }}
+
+  /* Interactive Selection States */
+  .day-cell.selected-endpoint {{ background: var(--header-bg) !important; color: var(--header-text) !important; }}
+  .day-cell.selected-endpoint .price,
+  .day-cell.selected-endpoint .min-stay,
+  .day-cell.selected-endpoint .day-num {{ color: var(--header-text) !important; }}
+  .day-cell.in-range {{ background: #ccfbf1 !important; }}
+  .endpoint-badge {{ font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: #0f172a; color: #fff; padding: 1px 4px; border-radius: 3px; display: inline-block; margin-top: 2px; }}
+
   .day-top {{ display: flex; justify-content: space-between; align-items: flex-start; width: 100%; height: 16px; }}
   .holiday-star {{ font-size: 1rem; color: var(--star-color); line-height: 1; text-shadow: 0 1px 1px rgba(0,0,0,0.1); }}
   .day-num {{ font-size: 0.85rem; font-weight: 700; text-align: right; color: #475569; margin-left: auto; }}
@@ -369,6 +384,16 @@ class HTMLCalendarBuilder:
   .day-content {{ text-align: center; margin: auto 0; }}
   .price {{ font-size: 1.05rem; font-weight: 800; color: var(--text-avail); display: block; }}
   .min-stay {{ font-size: 0.72rem; color: #334155; display: block; margin-top: 2px; font-weight: 600; }}
+
+  /* Quote Summary Box */
+  .quote-card {{ background: #f8fafc; border-top: 2px solid var(--header-bg); padding: 14px 18px; display: none; }}
+  .quote-grid {{ display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }}
+  .quote-details {{ font-size: 0.88rem; color: #334155; line-height: 1.5; }}
+  .quote-right {{ text-align: right; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }}
+  .quote-total {{ font-size: 1.3rem; font-weight: 800; color: #0f172a; }}
+  .quote-btn {{ background: var(--header-bg); color: var(--header-text); border: none; font-weight: 800; font-size: 0.88rem; padding: 10px 16px; border-radius: 6px; text-decoration: none; display: inline-block; cursor: pointer; transition: background 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+  .quote-btn:hover {{ background: #00a89a; }}
+  .quote-error {{ color: #be123c; font-size: 0.85rem; font-weight: 700; }}
 
   /* Bottom Holiday List */
   .monthly-holidays {{ background: #f8fafc; padding: 12px 18px; font-size: 0.85rem; color: #334155; border-top: 1px solid #cbd5e1; }}
@@ -381,6 +406,9 @@ class HTMLCalendarBuilder:
     .day-cell {{ min-height: 60px; padding: 4px; }}
     .price {{ font-size: 0.85rem; }}
     .min-stay {{ font-size: 0.62rem; }}
+    .endpoint-badge {{ font-size: 0.52rem; padding: 1px 2px; }}
+    .quote-grid {{ flex-direction: column; align-items: flex-start; }}
+    .quote-right {{ width: 100%; justify-content: space-between; }}
     .monthly-holidays {{ padding: 10px 14px; }}
     .holiday-list {{ flex-direction: column; gap: 4px; }}
   }}
@@ -404,20 +432,179 @@ class HTMLCalendarBuilder:
     </div>
     <span class="updated-label">Updated: {updated_str}</span>
   </div>
+  <div class="quote-prompt">
+    <span id="promptText">💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
+    <button class="clear-btn" id="clearBtn" onclick="clearSelection()">Clear Dates</button>
+  </div>
   <div class="weekdays">
     <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
   </div>
   <div class="days-grid" id="daysGrid"></div>
+
+  <div class="quote-card" id="quoteCard">
+    <div class="quote-grid" id="quoteGrid">
+      <div class="quote-details" id="quoteDetails"></div>
+      <div class="quote-right">
+        <div class="quote-total" id="quoteTotal"></div>
+        <a href="#" class="quote-btn" id="inquireBtn" target="_blank" rel="noopener">Inquire to Book</a>
+      </div>
+    </div>
+    <div class="quote-error" id="quoteError" style="display: none;"></div>
+  </div>
+
   <div class="monthly-holidays" id="monthlyHolidays" style="display: none;"></div>
 </div>
 
 <script>
   const rawData = {records_json};
+  const CLEANING_FEE = {CLEANING_FEE};
+  const BOOKING_EMAIL = "{BOOKING_EMAIL}";
   const dataMap = {{}};
   rawData.forEach(item => {{ dataMap[item.date] = item; }});
 
   let current = new Date();
   current.setDate(1);
+
+  let checkInDate = null;
+  let checkOutDate = null;
+
+  function parseLocal(dateStr) {{
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }}
+
+  function formatDisplayDate(dateStr) {{
+    const d = parseLocal(dateStr);
+    return d.toLocaleDateString('en-US', {{ month: 'short', day: 'numeric', year: 'numeric' }});
+  }}
+
+  function handleDayClick(dateStr) {{
+    const info = dataMap[dateStr];
+    if (!info) return;
+
+    // 1. Starting a new selection or resetting an existing complete selection
+    if (!checkInDate || (checkInDate && checkOutDate)) {{
+      if (!info.available) return; // Check-in must be on an available night
+      checkInDate = dateStr;
+      checkOutDate = null;
+      document.getElementById("promptText").innerText = "Check-In: " + formatDisplayDate(checkInDate) + " — Now click your Check-Out date.";
+      document.getElementById("clearBtn").style.display = "inline-block";
+      document.getElementById("quoteCard").style.display = "none";
+      renderCalendar();
+      return;
+    }}
+
+    // 2. Selecting Check-Out date
+    if (checkInDate && !checkOutDate) {{
+      const clickedObj = parseLocal(dateStr);
+      const startObj = parseLocal(checkInDate);
+
+      if (clickedObj <= startObj) {{
+        if (info.available) {{
+          checkInDate = dateStr;
+          document.getElementById("promptText").innerText = "Check-In: " + formatDisplayDate(checkInDate) + " — Now click your Check-Out date.";
+        }} else {{
+          clearSelection();
+        }}
+        renderCalendar();
+        return;
+      }}
+
+      checkOutDate = dateStr;
+      calculateQuote();
+      renderCalendar();
+    }}
+  }}
+
+  function clearSelection() {{
+    checkInDate = null;
+    checkOutDate = null;
+    document.getElementById("promptText").innerText = "💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.";
+    document.getElementById("clearBtn").style.display = "none";
+    document.getElementById("quoteCard").style.display = "none";
+    renderCalendar();
+  }}
+
+  function calculateQuote() {{
+    const startObj = parseLocal(checkInDate);
+    const endObj = parseLocal(checkOutDate);
+    let curr = new Date(startObj);
+    let nights = 0;
+    let accommodationTotal = 0;
+    let breakdownLines = [];
+    let hasBlocked = false;
+
+    const checkInInfo = dataMap[checkInDate];
+    const requiredMinStay = parseInt(checkInInfo.min_stay, 10) || 1;
+
+    while (curr < endObj) {{
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, '0');
+      const d = String(curr.getDate()).padStart(2, '0');
+      const dKey = `${{y}}-${{m}}-${{d}}`;
+      const dayData = dataMap[dKey];
+
+      if (!dayData || !dayData.available) {{
+        hasBlocked = true;
+        break;
+      }}
+
+      const price = parseFloat(dayData.price);
+      accommodationTotal += price;
+      breakdownLines.push(`• ${{dKey}}: $${{price}}`);
+      nights++;
+      curr.setDate(curr.getDate() + 1);
+    }}
+
+    const quoteCard = document.getElementById("quoteCard");
+    const quoteGrid = document.getElementById("quoteGrid");
+    const errorBox = document.getElementById("quoteError");
+    const detailsBox = document.getElementById("quoteDetails");
+    const totalBox = document.getElementById("quoteTotal");
+    const btn = document.getElementById("inquireBtn");
+
+    quoteCard.style.display = "block";
+
+    if (hasBlocked) {{
+      quoteGrid.style.display = "none";
+      errorBox.style.display = "block";
+      errorBox.innerText = "⚠️ Selected range includes nights that are already booked. Please select an open date range.";
+      return;
+    }}
+
+    if (nights < requiredMinStay) {{
+      quoteGrid.style.display = "none";
+      errorBox.style.display = "block";
+      errorBox.innerText = `⚠️ Minimum stay starting on ${{formatDisplayDate(checkInDate)}} is ${{requiredMinStay}} nights (you selected ${{nights}} night${{nights > 1 ? 's' : ''}}).`;
+      return;
+    }}
+
+    errorBox.style.display = "none";
+    quoteGrid.style.display = "flex";
+
+    const grandTotal = accommodationTotal + CLEANING_FEE;
+    document.getElementById("promptText").innerText = `Selected Stay: ${{formatDisplayDate(checkInDate)}} – ${{formatDisplayDate(checkOutDate)}} (${{nights}} nights)`;
+
+    detailsBox.innerHTML = `
+      <strong>${{formatDisplayDate(checkInDate)}} &rarr; ${{formatDisplayDate(checkOutDate)}}</strong> (${{nights}} Nights)<br>
+      Nightly Subtotal: <strong>$${{accommodationTotal.toLocaleString()}}</strong> + Cleaning Fee: <strong>$${{CLEANING_FEE}}</strong>
+    `;
+    totalBox.innerText = `Total: $${{grandTotal.toLocaleString()}}`;
+
+    const subject = encodeURIComponent(`Direct Booking Inquiry: ${{formatDisplayDate(checkInDate)}} - ${{formatDisplayDate(checkOutDate)}} (Mammoth Charm)`);
+    const body = encodeURIComponent(
+      `Hi,\n\nI would like to inquire about booking Mammoth Charm for the following dates:\n\n` +
+      `Check-In: ${{formatDisplayDate(checkInDate)}}\n` +
+      `Check-Out: ${{formatDisplayDate(checkOutDate)}}\n` +
+      `Total Nights: ${{nights}}\n\n` +
+      `Nightly Rate Breakdown:\n${{breakdownLines.join('\\n')}}\n\n` +
+      `Nightly Subtotal: $${{accommodationTotal.toLocaleString()}}\n` +
+      `Cleaning Fee: $${{CLEANING_FEE}}\n` +
+      `Estimated Total Quote: $${{grandTotal.toLocaleString()}}\n\n` +
+      `Please let me know how to finalize our reservation!`
+    );
+    btn.href = `mailto:${{BOOKING_EMAIL}}?subject=${{subject}}&body=${{body}}`;
+  }}
 
   function renderCalendar() {{
     const year = current.getFullYear();
@@ -453,21 +640,49 @@ class HTMLCalendarBuilder:
         currentMonthHolidays.push({{ day: d, name: info.holiday }});
       }}
 
+      const isCheckIn = (dateStr === checkInDate);
+      const isCheckOut = (dateStr === checkOutDate);
+      let isInRange = false;
+
+      if (checkInDate && checkOutDate) {{
+        const cDate = parseLocal(dateStr);
+        isInRange = (cDate > parseLocal(checkInDate) && cDate < parseLocal(checkOutDate));
+      }}
+
       if (!info) {{
         cell.className = "day-cell empty";
       }} else if (!info.available) {{
         cell.className = "day-cell unavail";
-        // REMOVED 'Unavailable' text
+        if (checkInDate && !checkOutDate && parseLocal(dateStr) > parseLocal(checkInDate)) {{
+          cell.classList.add("checkout-eligible");
+          cell.onclick = () => handleDayClick(dateStr);
+        }}
+        if (isCheckOut) {{
+          cell.classList.add("selected-endpoint");
+          contentHtml = `<div class="day-content"><span class="endpoint-badge">Check-Out</span></div>`;
+        }}
       }} else {{
         cell.className = "day-cell avail";
-        contentHtml = `<div class="day-content"><span class="price">$${{info.price}}</span><span class="min-stay">${{info.min_stay}} Night Min</span></div>`;
+        cell.onclick = () => handleDayClick(dateStr);
+
+        let subLabel = `<span class="min-stay">${{info.min_stay}} Night Min</span>`;
+        if (isCheckIn) {{
+          cell.classList.add("selected-endpoint");
+          subLabel = `<span class="endpoint-badge">Check-In</span>`;
+        }} else if (isCheckOut) {{
+          cell.classList.add("selected-endpoint");
+          subLabel = `<span class="endpoint-badge">Check-Out</span>`;
+        }} else if (isInRange) {{
+          cell.classList.add("in-range");
+        }}
+
+        contentHtml = `<div class="day-content"><span class="price">$${{info.price}}</span>${{subLabel}}</div>`;
       }}
 
       cell.innerHTML = `<div class="day-top">${{starHtml}}<span class="day-num">${{d}}</span></div>${{contentHtml}}`;
       grid.appendChild(cell);
     }}
     
-    // Render dynamic bottom holiday list
     const holidayContainer = document.getElementById("monthlyHolidays");
     if (currentMonthHolidays.length > 0) {{
       let listHtml = currentMonthHolidays.map(h => 
