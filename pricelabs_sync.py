@@ -8,7 +8,7 @@ for Mammoth Charm LLC. Builds two RFC 5545 compliant iCalendar (.ics) feeds
 AND two interactive HTML monthly calendar grids (Standard and 25% Discounted).
 
 Author: Mammoth Charm LLC Operations
-Version: 4.0.0 (Diagonal Split Turnaround Cells + Dashed Eligible Border + Mobile Portrait UX)
+Version: 4.1.0 (Orphan Gap Filtering + Last-Night Check-In Guard + Legend/Timestamp Polish)
 """
 
 import os
@@ -112,7 +112,7 @@ class AirbnbICalExtractor:
             return blocked_dates
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.0; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.1; +https://mammothcharm.com)"
         }
 
         try:
@@ -255,6 +255,62 @@ class PriceLabsExtractor:
 
         return True
 
+    def _apply_orphan_gap_rules(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Detects contiguous available windows where NO date in the window can satisfy its
+        minimum stay requirement before the next unavailable date:
+        - If the window starts at index 0 (immediately touching past/unbookable dates, like Oct 22),
+          removes those dates from the bookable list so they render white/unbookable.
+        - If the window is between two future booked blocks, marks those dates as available=False
+          so they render light pink (Unavailable).
+        """
+        if not records:
+            return records
+
+        records.sort(key=lambda x: x["date"])
+        n = len(records)
+        i = 0
+        leading_remove_indices: Set[int] = set()
+
+        while i < n:
+            if not records[i]["available"]:
+                i += 1
+                continue
+
+            j = i
+            while j < n and records[j]["available"]:
+                j += 1
+
+            # Contiguous available run is records[i : j]
+            # Check if at least one date k in [i, j-1] has enough open nights (j - k) to meet its min_stay
+            can_any_book = False
+            for k in range(i, j):
+                try:
+                    req_min = int(records[k].get("min_stay", 2))
+                except (ValueError, TypeError):
+                    req_min = 2
+                remaining_open_nights = j - k
+                if remaining_open_nights >= req_min:
+                    can_any_book = True
+                    break
+
+            if not can_any_book:
+                if i == 0:
+                    # Touches unbookable past/today (e.g., Oct 22): remove so it renders white/gray
+                    for k in range(i, j):
+                        leading_remove_indices.add(k)
+                else:
+                    # Trapped between two future bookings: mark Unavailable (light pink)
+                    for k in range(i, j):
+                        records[k]["available"] = False
+
+            i = j
+
+        if leading_remove_indices:
+            records = [rec for idx, rec in enumerate(records) if idx not in leading_remove_indices]
+
+        return records
+
     def _normalize_records(self, raw_records: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         if ZoneInfo:
             today = datetime.now(ZoneInfo(TIMEZONE_STR)).date()
@@ -313,6 +369,9 @@ class PriceLabsExtractor:
                 "available": is_avail,
                 "holiday": holiday_name
             })
+
+        standard_records = self._apply_orphan_gap_rules(standard_records)
+        discounted_records = self._apply_orphan_gap_rules(discounted_records)
 
         return standard_records, discounted_records
 
@@ -390,7 +449,10 @@ class HTMLCalendarBuilder:
             now_local = datetime.now(ZoneInfo(TIMEZONE_STR))
         else:
             now_local = datetime.utcnow() - timedelta(hours=7)
-        updated_str = now_local.strftime("%b %d, %Y")
+
+        date_part = now_local.strftime("%b %d, %Y")
+        time_part = now_local.strftime("%I:%M %p").lstrip("0").lower()
+        updated_str = f"{date_part} at {time_part}"
 
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -405,6 +467,7 @@ class HTMLCalendarBuilder:
     --text-avail: #166534;
     --bg-unavail: #ffe4e6;
     --border-unavail: #fda4af;
+    --bg-past: #f8fafc;
     --header-bg: #00c4b3;
     --header-text: #0f172a;
     --star-color: #d97706;
@@ -437,14 +500,19 @@ class HTMLCalendarBuilder:
   .days-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: #cbd5e1; }}
   
   .day-cell {{ min-height: 75px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; transition: background 0.12s; user-select: none; min-width: 0; overflow: hidden; }}
-  .day-cell.empty {{ background: #f8fafc; }}
+  .day-cell.empty {{ background: var(--bg-past); }}
   .day-cell.avail {{ background: var(--bg-avail); cursor: pointer; }}
   .day-cell.avail:hover {{ filter: brightness(0.96); }}
   .day-cell.unavail {{ background: var(--bg-unavail); }}
 
-  /* 1. Crisp 50/50 Diagonal Split for Start of Booked Block (e.g., Nov 8: Upper-Left Green / Lower-Right Pink) */
+  /* 1A. Crisp 50/50 Diagonal Split for Start of Booked Block After Available Day (Upper-Left Green / Lower-Right Pink) */
   .day-cell.unavail.turnaround-checkin-booked {{
     background: linear-gradient(135deg, var(--bg-avail) 50%, var(--bg-unavail) 50%);
+  }}
+
+  /* 1B. Crisp 50/50 Diagonal Split for Start of Booked Block After Unbookable/White Day (e.g., Oct 23: Upper-Left White / Lower-Right Pink) */
+  .day-cell.unavail.turnaround-past-booked {{
+    background: linear-gradient(135deg, var(--bg-past) 50%, var(--bg-unavail) 50%);
   }}
 
   /* 2. Crisp 50/50 Diagonal Split for First Available Day After Booked Block (e.g., Nov 17: Upper-Left Pink / Lower-Right Green) */
@@ -548,8 +616,8 @@ class HTMLCalendarBuilder:
   </div>
   <div class="legend">
     <div class="legend-items">
-      <span class="legend-pill pill-avail">Available ($ Rate &amp; Min Stay)</span>
-      <span class="legend-pill pill-unavail">Booked</span>
+      <span class="legend-pill pill-avail">Available</span>
+      <span class="legend-pill pill-unavail">Unavailable</span>
       <span class="pill-holiday">★ US Holiday</span>
     </div>
     <span class="updated-label">Updated: {updated_str}</span>
@@ -625,10 +693,11 @@ class HTMLCalendarBuilder:
     return `${{y}}-${{m}}-${{day}}`;
   }}
 
-  // Finds the very first booked date after checkInStr (eligible for morning check-out)
-  function getFirstBookedAfter(checkInStr) {{
-    if (!checkInStr) return null;
+  // Returns {{ firstUnavailableDate, openNightsCount }} starting from checkInStr
+  function getOpenWindowAfter(checkInStr) {{
+    if (!checkInStr) return {{ firstUnavailableDate: null, openNightsCount: 0 }};
     const startObj = parseLocal(checkInStr);
+    let openNights = 1; // checkInStr itself is available
     for (let i = 1; i <= 365; i++) {{
       const curr = new Date(startObj.getFullYear(), startObj.getMonth(), startObj.getDate() + i);
       const y = curr.getFullYear();
@@ -636,10 +705,35 @@ class HTMLCalendarBuilder:
       const d = String(curr.getDate()).padStart(2, '0');
       const dKey = `${{y}}-${{m}}-${{d}}`;
       const dayInfo = dataMap[dKey];
-      if (!dayInfo) return null;
-      if (!dayInfo.available) return dKey;
+      if (!dayInfo) return {{ firstUnavailableDate: null, openNightsCount: openNights }};
+      if (!dayInfo.available) return {{ firstUnavailableDate: dKey, openNightsCount: openNights }};
+      openNights++;
     }}
-    return null;
+    return {{ firstUnavailableDate: null, openNightsCount: openNights }};
+  }}
+
+  // Evaluates whether a newly selected Check-In date has enough open nights before the next booking
+  function validateCheckInSelection(dateStr) {{
+    const info = dataMap[dateStr];
+    const reqMin = parseInt(info.min_stay, 10) || 2;
+    const windowInfo = getOpenWindowAfter(dateStr);
+
+    const quoteCard = document.getElementById("quoteCard");
+    const quoteGrid = document.getElementById("quoteGrid");
+    const errorBox = document.getElementById("quoteError");
+    const inquiryForm = document.getElementById("inquiryForm");
+
+    if (windowInfo.openNightsCount < reqMin && windowInfo.firstUnavailableDate) {{
+      quoteCard.style.display = "block";
+      quoteGrid.style.display = "none";
+      inquiryForm.style.display = "none";
+      errorBox.style.display = "block";
+      errorBox.innerText = `⚠️ Check-in on ${{formatDisplayDate(dateStr)}} does not meet the ${{reqMin}}-night minimum stay requirement because ${{formatDisplayDate(windowInfo.firstUnavailableDate)}} is already unavailable. Please select an earlier check-in date.`;
+    }} else {{
+      quoteCard.style.display = "none";
+      errorBox.style.display = "none";
+      inquiryForm.style.display = "none";
+    }}
   }}
 
   function handleDayClick(dateStr) {{
@@ -652,8 +746,7 @@ class HTMLCalendarBuilder:
       checkOutDate = null;
       document.getElementById("promptText").innerText = "";
       document.getElementById("clearBtn").style.display = "inline-block";
-      document.getElementById("quoteCard").style.display = "none";
-      document.getElementById("inquiryForm").style.display = "none";
+      validateCheckInSelection(checkInDate);
       renderCalendar();
       return;
     }}
@@ -666,6 +759,7 @@ class HTMLCalendarBuilder:
         if (info.available) {{
           checkInDate = dateStr;
           document.getElementById("promptText").innerText = "";
+          validateCheckInSelection(checkInDate);
         }} else {{
           clearSelection();
         }}
@@ -787,7 +881,7 @@ class HTMLCalendarBuilder:
     if (hasBlocked) {{
       quoteGrid.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = "⚠️ Selected range includes nights that are already booked. Please select an open date range.";
+      errorBox.innerText = "⚠️ Selected range includes nights that are already unavailable. Please select an open date range.";
       return;
     }}
 
@@ -830,7 +924,16 @@ class HTMLCalendarBuilder:
     grid.innerHTML = "";
     
     let currentMonthHolidays = [];
-    const eligibleTurnaroundDate = (checkInDate && !checkOutDate) ? getFirstBookedAfter(checkInDate) : null;
+
+    // Only highlight the first unavailable date with a dashed outline if the open window meets min_stay
+    let eligibleTurnaroundDate = null;
+    if (checkInDate && !checkOutDate && dataMap[checkInDate]) {{
+      const reqMin = parseInt(dataMap[checkInDate].min_stay, 10) || 2;
+      const winInfo = getOpenWindowAfter(checkInDate);
+      if (winInfo.openNightsCount >= reqMin) {{
+        eligibleTurnaroundDate = winInfo.firstUnavailableDate;
+      }}
+    }}
 
     for (let i = 0; i < firstDay; i++) {{
       const empty = document.createElement("div");
@@ -868,12 +971,15 @@ class HTMLCalendarBuilder:
       }} else if (!info.available) {{
         cell.className = "day-cell unavail";
 
-        // If previous night was available, this is the start of a booked block (morning available for check-out)
+        // If previous night was available, upper-left is light green / lower-right is light pink
         if (prevInfo && prevInfo.available) {{
           cell.classList.add("turnaround-checkin-booked");
+        }} else if (!prevInfo) {{
+          // If previous night is unbookable/past (like Oct 22 before Oct 23), upper-left is white/gray / lower-right is light pink
+          cell.classList.add("turnaround-past-booked");
         }}
 
-        // If guest selected a Check-In date, highlight the eligible turnaround date with dashed border only
+        // If guest selected a valid Check-In date, highlight the eligible turnaround date with dashed border only
         if (dateStr === eligibleTurnaroundDate) {{
           cell.classList.add("checkout-eligible");
           cell.onclick = () => handleDayClick(dateStr);
