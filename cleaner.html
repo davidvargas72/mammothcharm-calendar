@@ -137,7 +137,7 @@
     <div class="cal-header">
       <h2 class="cal-title" id="monthLabel">Loading...</h2>
       <div class="nav-btns">
-        <button class="nav-btn" onclick="changeMonth(-1)">&#8592; Prev</button>
+        <button class="nav-btn" id="prevBtn" onclick="changeMonth(-1)" style="display: none;">&#8592; Prev</button>
         <button class="nav-btn" onclick="goToday()">Today</button>
         <button class="nav-btn" onclick="changeMonth(1)">Next &#8594;</button>
       </div>
@@ -149,7 +149,7 @@
         <span class="legend-pill pill-turnover">Same-Day Turnover</span>
         <span class="pill-holiday">★ US Holiday</span>
       </div>
-      <span class="updated-label">Updated: Oct 22, 2026 at 1:31 pm</span>
+      <span class="updated-label">Updated: Oct 22, 2026 at 1:43 pm</span>
     </div>
     <div class="weekdays">
       <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
@@ -167,8 +167,11 @@
   const dataMap = {};
   rawData.forEach(item => { dataMap[item.date] = item; });
 
-  let current = new Date();
-  current.setDate(1);
+  const now = new Date();
+  const minYear = now.getFullYear();
+  const minMonth = now.getMonth();
+
+  let current = new Date(minYear, minMonth, 1);
 
   function parseLocal(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -228,6 +231,14 @@
     const month = current.getMonth();
     const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     document.getElementById("monthLabel").innerText = monthNames[month] + " " + year;
+
+    // Hide Prev button when viewing the current month
+    const prevBtn = document.getElementById("prevBtn");
+    if (year < minYear || (year === minYear && month <= minMonth)) {
+      prevBtn.style.display = "none";
+    } else {
+      prevBtn.style.display = "inline-block";
+    }
 
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -292,13 +303,16 @@
   }
 
   function changeMonth(delta) {
-    current.setMonth(current.getMonth() + delta);
+    const nextDate = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+    if (nextDate.getFullYear() < minYear || (nextDate.getFullYear() === minYear && nextDate.getMonth() < minMonth)) {
+      return;
+    }
+    current = nextDate;
     renderCalendar();
   }
 
   function goToday() {
-    current = new Date();
-    current.setDate(1);
+    current = new Date(minYear, minMonth, 1);
     renderCalendar();
   }
 
