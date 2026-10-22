@@ -10,7 +10,7 @@ for Mammoth Charm LLC. Builds:
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.2 (Cleaner Grid Visual Polish + Pink/Amber Diagonal Turnover + Emoji-Free UI)
+Version: 4.2.3 (Hide Prev Button on Current Month + Full Monthly Holidays on All Calendars)
 """
 
 import os
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.2; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.3; +https://mammothcharm.com)"
         }
 
         try:
@@ -476,6 +476,12 @@ class HTMLCalendarBuilder:
         time_part = now_local.strftime("%I:%M %p").lstrip("0").lower()
         updated_str = f"{date_part} at {time_part}"
 
+        # Full holiday map so past dates in the current month (e.g. Oct 12 Columbus Day) still display
+        holiday_map = {}
+        for y in range(now_local.year, now_local.year + 3):
+            holiday_map.update(calculate_us_holidays(y))
+        holidays_json = json.dumps(holiday_map)
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -631,7 +637,7 @@ class HTMLCalendarBuilder:
   <div class="cal-header">
     <h2 class="cal-title" id="monthLabel">Loading...</h2>
     <div class="nav-btns">
-      <button class="nav-btn" onclick="changeMonth(-1)">&#8592; Prev</button>
+      <button class="nav-btn" id="prevBtn" onclick="changeMonth(-1)" style="display: none;">&#8592; Prev</button>
       <button class="nav-btn" onclick="goToday()">Today</button>
       <button class="nav-btn" onclick="changeMonth(1)">Next &#8594;</button>
     </div>
@@ -683,13 +689,17 @@ class HTMLCalendarBuilder:
 
 <script>
   const rawData = {records_json};
+  const holidayCatalog = {holidays_json};
   const CLEANING_FEE = {CLEANING_FEE};
   const WEB3FORMS_KEY = "{WEB3FORMS_ACCESS_KEY}";
   const dataMap = {{}};
   rawData.forEach(item => {{ dataMap[item.date] = item; }});
 
-  let current = new Date();
-  current.setDate(1);
+  const now = new Date();
+  const minYear = now.getFullYear();
+  const minMonth = now.getMonth();
+
+  let current = new Date(minYear, minMonth, 1);
 
   let checkInDate = null;
   let checkOutDate = null;
@@ -937,6 +947,14 @@ class HTMLCalendarBuilder:
     const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     document.getElementById("monthLabel").innerText = monthNames[month] + " " + year;
 
+    // Hide Prev button when viewing the current month
+    const prevBtn = document.getElementById("prevBtn");
+    if (year < minYear || (year === minYear && month <= minMonth)) {{
+      prevBtn.style.display = "none";
+    }} else {{
+      prevBtn.style.display = "inline-block";
+    }}
+
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const grid = document.getElementById("daysGrid");
@@ -966,13 +984,14 @@ class HTMLCalendarBuilder:
       const dateStr = `${{year}}-${{mm}}-${{dd}}`;
       const info = dataMap[dateStr];
       const prevInfo = dataMap[getPrevDateStr(dateStr)];
+      const holidayName = (info && info.holiday) ? info.holiday : (holidayCatalog[dateStr] || "");
 
       let contentHtml = "";
       let starHtml = "";
 
-      if (info && info.holiday) {{
-        starHtml = `<span class="holiday-star" title="${{info.holiday}}">★</span>`;
-        currentMonthHolidays.push({{ day: d, name: info.holiday }});
+      if (holidayName) {{
+        starHtml = `<span class="holiday-star" title="${{holidayName}}">★</span>`;
+        currentMonthHolidays.push({{ day: d, name: holidayName }});
       }}
 
       const isCheckIn = (dateStr === checkInDate);
@@ -1043,13 +1062,16 @@ class HTMLCalendarBuilder:
   }}
 
   function changeMonth(delta) {{
-    current.setMonth(current.getMonth() + delta);
+    const nextDate = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+    if (nextDate.getFullYear() < minYear || (nextDate.getFullYear() === minYear && nextDate.getMonth() < minMonth)) {{
+      return;
+    }}
+    current = nextDate;
     renderCalendar();
   }}
 
   function goToday() {{
-    current = new Date();
-    current.setDate(1);
+    current = new Date(minYear, minMonth, 1);
     renderCalendar();
   }}
 
@@ -1092,8 +1114,6 @@ class CleanerCalendarBuilder:
         for y in range(today.year, today.year + 3):
             holiday_catalog.update(calculate_us_holidays(y))
 
-        # Clamp/filter event blocks to active_start so Airbnb's automatic 1-day advance-notice block
-        # on 'today' is ignored, matching the Direct Booking Calendar.
         active_blocks: List[Dict[str, str]] = []
         for b in event_blocks:
             s_obj = datetime.strptime(b["start"], "%Y-%m-%d").date()
@@ -1107,7 +1127,6 @@ class CleanerCalendarBuilder:
                 "label": "Booked"
             })
 
-        # Fallback if no VEVENT blocks were parsed
         if not active_blocks and raw_booked_dates:
             future_dates = sorted([
                 d for d in raw_booked_dates
@@ -1148,7 +1167,6 @@ class CleanerCalendarBuilder:
                 occupied_nights.add(c_obj.strftime("%Y-%m-%d"))
                 c_obj += timedelta(days=1)
 
-        # Build daily records starting at active_start (so dates <= today render white/past)
         daily_records: List[Dict[str, Any]] = []
         curr = active_start
         while curr <= end_window:
@@ -1161,7 +1179,6 @@ class CleanerCalendarBuilder:
                 day_state = "SAME_DAY_TURNOVER"
             elif is_in:
                 if curr == active_start:
-                    # Immediately follows white unbookable/today cell (e.g., Oct 23): Upper-Left White / Lower-Right Pink
                     day_state = "CHECK_IN_FROM_PAST"
                 else:
                     day_state = "CHECK_IN"
@@ -1179,7 +1196,6 @@ class CleanerCalendarBuilder:
             })
             curr += timedelta(days=1)
 
-        # Build Upcoming Cleaning Windows summary list (next 8 turnovers)
         upcoming_windows: List[Dict[str, Any]] = []
         for idx, b in enumerate(active_blocks):
             co_str = b["end"]
@@ -1234,7 +1250,6 @@ class CleanerCalendarBuilder:
         time_part = now_local.strftime("%I:%M %p").lstrip("0").lower()
         updated_str = f"{date_part} at {time_part}"
 
-        # Also provide full holiday map to JS so past dates in current month still show holiday stars if applicable
         holiday_map = {}
         for y in range(now_local.year, now_local.year + 3):
             holiday_map.update(calculate_us_holidays(y))
@@ -1379,7 +1394,7 @@ class CleanerCalendarBuilder:
     <div class="cal-header">
       <h2 class="cal-title" id="monthLabel">Loading...</h2>
       <div class="nav-btns">
-        <button class="nav-btn" onclick="changeMonth(-1)">&#8592; Prev</button>
+        <button class="nav-btn" id="prevBtn" onclick="changeMonth(-1)" style="display: none;">&#8592; Prev</button>
         <button class="nav-btn" onclick="goToday()">Today</button>
         <button class="nav-btn" onclick="changeMonth(1)">Next &#8594;</button>
       </div>
@@ -1409,8 +1424,11 @@ class CleanerCalendarBuilder:
   const dataMap = {{}};
   rawData.forEach(item => {{ dataMap[item.date] = item; }});
 
-  let current = new Date();
-  current.setDate(1);
+  const now = new Date();
+  const minYear = now.getFullYear();
+  const minMonth = now.getMonth();
+
+  let current = new Date(minYear, minMonth, 1);
 
   function parseLocal(dateStr) {{
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -1470,6 +1488,14 @@ class CleanerCalendarBuilder:
     const month = current.getMonth();
     const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     document.getElementById("monthLabel").innerText = monthNames[month] + " " + year;
+
+    // Hide Prev button when viewing the current month
+    const prevBtn = document.getElementById("prevBtn");
+    if (year < minYear || (year === minYear && month <= minMonth)) {{
+      prevBtn.style.display = "none";
+    }} else {{
+      prevBtn.style.display = "inline-block";
+    }}
 
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1534,13 +1560,16 @@ class CleanerCalendarBuilder:
   }}
 
   function changeMonth(delta) {{
-    current.setMonth(current.getMonth() + delta);
+    const nextDate = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+    if (nextDate.getFullYear() < minYear || (nextDate.getFullYear() === minYear && nextDate.getMonth() < minMonth)) {{
+      return;
+    }}
+    current = nextDate;
     renderCalendar();
   }}
 
   function goToday() {{
-    current = new Date();
-    current.setDate(1);
+    current = new Date(minYear, minMonth, 1);
     renderCalendar();
   }}
 
