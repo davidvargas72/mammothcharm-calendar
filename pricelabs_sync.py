@@ -10,7 +10,7 @@ for Mammoth Charm LLC. Builds:
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.1 (Dark Slate Header Bar + White Month Title + Cyan Navigation Buttons)
+Version: 4.2.2 (Cleaner Grid Visual Polish + Pink/Amber Diagonal Turnover + Emoji-Free UI)
 """
 
 import os
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.1; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.2; +https://mammothcharm.com)"
         }
 
         try:
@@ -645,7 +645,7 @@ class HTMLCalendarBuilder:
     <span class="updated-label">Updated: {updated_str}</span>
   </div>
   <div class="quote-prompt">
-    <span id="promptText">💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
+    <span id="promptText">Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
     <button class="clear-btn" id="clearBtn" onclick="clearSelection()">Clear Dates</button>
   </div>
   <div class="weekdays">
@@ -747,7 +747,7 @@ class HTMLCalendarBuilder:
       quoteGrid.style.display = "none";
       inquiryForm.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `⚠️ Check-in on ${{formatDisplayDate(dateStr)}} does not meet the ${{reqMin}}-night minimum stay requirement because ${{formatDisplayDate(windowInfo.firstUnavailableDate)}} is already unavailable. Please select an earlier check-in date.`;
+      errorBox.innerText = `Check-in on ${{formatDisplayDate(dateStr)}} does not meet the ${{reqMin}}-night minimum stay requirement because ${{formatDisplayDate(windowInfo.firstUnavailableDate)}} is already unavailable. Please select an earlier check-in date.`;
     }} else {{
       quoteCard.style.display = "none";
       errorBox.style.display = "none";
@@ -795,7 +795,7 @@ class HTMLCalendarBuilder:
   function clearSelection() {{
     checkInDate = null;
     checkOutDate = null;
-    document.getElementById("promptText").innerText = "💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.";
+    document.getElementById("promptText").innerText = "Click an available Check-In and Check-Out date to calculate your instant stay quote.";
     document.getElementById("clearBtn").style.display = "none";
     document.getElementById("quoteCard").style.display = "none";
     document.getElementById("inquiryForm").style.display = "none";
@@ -841,16 +841,16 @@ class HTMLCalendarBuilder:
       status.style.display = "block";
       if (response.status === 200) {{
         status.style.color = "#166534";
-        status.innerText = "✓ Booking inquiry sent! We will get back to you within 24 hours.";
+        status.innerText = "Booking inquiry sent. We will get back to you within 24 hours.";
         document.getElementById("inquiryForm").reset();
       }} else {{
         status.style.color = "#be123c";
-        status.innerText = "⚠️ Error sending request: " + (result.message || "Please try again.");
+        status.innerText = "Error sending request: " + (result.message || "Please try again.");
       }}
     }} catch (err) {{
       status.style.display = "block";
       status.style.color = "#be123c";
-      status.innerText = "⚠️ Network error. Please try again.";
+      status.innerText = "Network error. Please try again.";
     }}
     btn.disabled = false;
     btn.innerText = "Send Booking Request";
@@ -900,14 +900,14 @@ class HTMLCalendarBuilder:
     if (hasBlocked) {{
       quoteGrid.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = "⚠️ Selected range includes nights that are already unavailable. Please select an open date range.";
+      errorBox.innerText = "Selected range includes nights that are already unavailable. Please select an open date range.";
       return;
     }}
 
     if (nights < requiredMinStay) {{
       quoteGrid.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `⚠️ Minimum stay starting on ${{formatDisplayDate(checkInDate)}} is ${{requiredMinStay}} nights (you selected ${{nights}} night${{nights > 1 ? 's' : ''}}).`;
+      errorBox.innerText = `Minimum stay starting on ${{formatDisplayDate(checkInDate)}} is ${{requiredMinStay}} nights (you selected ${{nights}} night${{nights > 1 ? 's' : ''}}).`;
       return;
     }}
 
@@ -1067,8 +1067,8 @@ class CleanerCalendarBuilder:
     Builds a standalone, read-only Cleaner Turnover Schedule dashboard (cleaner.html)
     featuring:
       - Section A: Upcoming Cleaning Windows summary list (Next 8 turnovers)
-      - Section B: Monthly Turnover Calendar Grid with Open, Booked, Check-In (4:00 PM),
-        Check-Out (10:00 AM), and High-Alert Same-Day Turnover (10a-4p) cells.
+      - Section B: Monthly Turnover Calendar Grid with color-coded cells (no cell text),
+        white cells for past/today, and Pink + Amber Outline + Amber Diagonal for Same-Day Turnovers.
     """
 
     def __init__(self, title: str = "Mammoth Charm - Cleaning & Turnover Schedule"):
@@ -1084,41 +1084,61 @@ class CleanerCalendarBuilder:
         else:
             today = (datetime.utcnow() - timedelta(hours=7)).date()
 
-        start_window = datetime(today.year, today.month, 1).date()
-        end_window = today + timedelta(days=365)
+        # Active tracking begins at today + 1 day (consistent with Guest Calendar & 1-day advance notice)
+        active_start = today + timedelta(days=1)
+        end_window = active_start + timedelta(days=365)
 
         holiday_catalog = {}
         for y in range(today.year, today.year + 3):
             holiday_catalog.update(calculate_us_holidays(y))
 
-        blocks = list(event_blocks)
-        if not blocks and raw_booked_dates:
-            sorted_dates = sorted(list(raw_booked_dates))
-            b_start = sorted_dates[0]
-            prev_d = datetime.strptime(b_start, "%Y-%m-%d").date()
-            for d_str in sorted_dates[1:]:
-                curr_d = datetime.strptime(d_str, "%Y-%m-%d").date()
-                if (curr_d - prev_d).days > 1:
-                    blocks.append({
-                        "start": b_start,
-                        "end": (prev_d + timedelta(days=1)).strftime("%Y-%m-%d"),
-                        "label": "Booked"
-                    })
-                    b_start = d_str
-                prev_d = curr_d
-            blocks.append({
-                "start": b_start,
-                "end": (prev_d + timedelta(days=1)).strftime("%Y-%m-%d"),
+        # Clamp/filter event blocks to active_start so Airbnb's automatic 1-day advance-notice block
+        # on 'today' is ignored, matching the Direct Booking Calendar.
+        active_blocks: List[Dict[str, str]] = []
+        for b in event_blocks:
+            s_obj = datetime.strptime(b["start"], "%Y-%m-%d").date()
+            e_obj = datetime.strptime(b["end"], "%Y-%m-%d").date()
+            if e_obj <= active_start:
+                continue
+            clamped_start = max(s_obj, active_start)
+            active_blocks.append({
+                "start": clamped_start.strftime("%Y-%m-%d"),
+                "end": e_obj.strftime("%Y-%m-%d"),
                 "label": "Booked"
             })
 
-        blocks.sort(key=lambda x: (x["start"], x["end"]))
+        # Fallback if no VEVENT blocks were parsed
+        if not active_blocks and raw_booked_dates:
+            future_dates = sorted([
+                d for d in raw_booked_dates
+                if datetime.strptime(d, "%Y-%m-%d").date() >= active_start
+            ])
+            if future_dates:
+                b_start = future_dates[0]
+                prev_d = datetime.strptime(b_start, "%Y-%m-%d").date()
+                for d_str in future_dates[1:]:
+                    curr_d = datetime.strptime(d_str, "%Y-%m-%d").date()
+                    if (curr_d - prev_d).days > 1:
+                        active_blocks.append({
+                            "start": b_start,
+                            "end": (prev_d + timedelta(days=1)).strftime("%Y-%m-%d"),
+                            "label": "Booked"
+                        })
+                        b_start = d_str
+                    prev_d = curr_d
+                active_blocks.append({
+                    "start": b_start,
+                    "end": (prev_d + timedelta(days=1)).strftime("%Y-%m-%d"),
+                    "label": "Booked"
+                })
+
+        active_blocks.sort(key=lambda x: (x["start"], x["end"]))
 
         checkin_dates: Set[str] = set()
         checkout_dates: Set[str] = set()
-        occupied_nights: Set[str] = set(raw_booked_dates)
+        occupied_nights: Set[str] = set()
 
-        for b in blocks:
+        for b in active_blocks:
             checkin_dates.add(b["start"])
             checkout_dates.add(b["end"])
             s_obj = datetime.strptime(b["start"], "%Y-%m-%d").date()
@@ -1128,19 +1148,23 @@ class CleanerCalendarBuilder:
                 occupied_nights.add(c_obj.strftime("%Y-%m-%d"))
                 c_obj += timedelta(days=1)
 
+        # Build daily records starting at active_start (so dates <= today render white/past)
         daily_records: List[Dict[str, Any]] = []
-        curr = start_window
+        curr = active_start
         while curr <= end_window:
             d_str = curr.strftime("%Y-%m-%d")
             is_in = d_str in checkin_dates
             is_out = d_str in checkout_dates
             is_occ = d_str in occupied_nights
-            is_past = curr < today
 
             if is_in and is_out:
                 day_state = "SAME_DAY_TURNOVER"
             elif is_in:
-                day_state = "CHECK_IN"
+                if curr == active_start:
+                    # Immediately follows white unbookable/today cell (e.g., Oct 23): Upper-Left White / Lower-Right Pink
+                    day_state = "CHECK_IN_FROM_PAST"
+                else:
+                    day_state = "CHECK_IN"
             elif is_out and not is_occ:
                 day_state = "CHECK_OUT"
             elif is_occ:
@@ -1151,20 +1175,18 @@ class CleanerCalendarBuilder:
             daily_records.append({
                 "date": d_str,
                 "state": day_state,
-                "is_past": is_past,
                 "holiday": holiday_catalog.get(d_str, "")
             })
             curr += timedelta(days=1)
 
+        # Build Upcoming Cleaning Windows summary list (next 8 turnovers)
         upcoming_windows: List[Dict[str, Any]] = []
-        for idx, b in enumerate(blocks):
+        for idx, b in enumerate(active_blocks):
             co_str = b["end"]
             co_date = datetime.strptime(co_str, "%Y-%m-%d").date()
-            if co_date < today:
-                continue
 
             next_ci_str = None
-            for next_b in blocks[idx + 1:]:
+            for next_b in active_blocks[idx + 1:]:
                 if next_b["start"] >= co_str:
                     next_ci_str = next_b["start"]
                     break
@@ -1212,6 +1234,12 @@ class CleanerCalendarBuilder:
         time_part = now_local.strftime("%I:%M %p").lstrip("0").lower()
         updated_str = f"{date_part} at {time_part}"
 
+        # Also provide full holiday map to JS so past dates in current month still show holiday stars if applicable
+        holiday_map = {}
+        for y in range(now_local.year, now_local.year + 3):
+            holiday_map.update(calculate_us_holidays(y))
+        holidays_json = json.dumps(holiday_map)
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1226,7 +1254,6 @@ class CleanerCalendarBuilder:
     --bg-booked: #ffe4e6;
     --border-booked: #fda4af;
     --text-booked: #9f1239;
-    --bg-turnover: #fef3c7;
     --border-turnover: #f59e0b;
     --text-turnover: #92400e;
     --bg-past: #f8fafc;
@@ -1266,7 +1293,7 @@ class CleanerCalendarBuilder:
   .legend-pill {{ display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 4px; font-size: 0.76rem; font-weight: 700; }}
   .pill-open {{ background: var(--bg-open); color: var(--text-open); border: 1px solid var(--border-open); }}
   .pill-booked {{ background: var(--bg-booked); color: #be123c; border: 1px solid var(--border-booked); }}
-  .pill-turnover {{ background: var(--bg-turnover); color: var(--text-turnover); border: 1.5px solid var(--border-turnover); }}
+  .pill-turnover {{ background: var(--bg-booked); color: var(--text-turnover); border: 2px solid var(--border-turnover); }}
   .pill-holiday {{ background: transparent; color: var(--star-color); font-weight: 800; font-size: 0.8rem; padding: 0 2px; }}
   .updated-label {{ color: #64748b; font-size: 0.74rem; font-weight: 500; }}
 
@@ -1275,14 +1302,22 @@ class CleanerCalendarBuilder:
 
   .day-cell {{ min-height: 74px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; user-select: none; min-width: 0; overflow: hidden; }}
   .day-cell.empty {{ background: var(--bg-past); }}
-  .day-cell.past-day {{ opacity: 0.52; }}
 
   .day-cell.state-open {{ background: var(--bg-open); }}
   .day-cell.state-booked {{ background: var(--bg-booked); }}
   .day-cell.state-checkin {{ background: linear-gradient(135deg, var(--bg-open) 50%, var(--bg-booked) 50%); }}
+  .day-cell.state-checkin-past {{ background: linear-gradient(135deg, var(--bg-past) 50%, var(--bg-booked) 50%); }}
   .day-cell.state-checkout {{ background: linear-gradient(135deg, var(--bg-booked) 50%, var(--bg-open) 50%); }}
+
+  /* Same-Day Turnover: Light Pink Background + Solid Amber Outline + Solid Amber Diagonal Line */
   .day-cell.state-turnover {{
-    background: var(--bg-turnover);
+    background: linear-gradient(
+      135deg,
+      var(--bg-booked) calc(50% - 1.5px),
+      var(--border-turnover) calc(50% - 1.5px),
+      var(--border-turnover) calc(50% + 1.5px),
+      var(--bg-booked) calc(50% + 1.5px)
+    );
     outline: 2.5px solid var(--border-turnover);
     outline-offset: -2.5px;
   }}
@@ -1290,14 +1325,6 @@ class CleanerCalendarBuilder:
   .day-top {{ display: flex; justify-content: space-between; align-items: flex-start; width: 100%; height: 16px; }}
   .holiday-star {{ font-size: 1rem; color: var(--star-color); line-height: 1; }}
   .day-num {{ font-size: 0.85rem; font-weight: 700; text-align: right; color: #334155; margin-left: auto; line-height: 1; }}
-
-  .day-content {{ text-align: center; margin: auto 0; width: 100%; }}
-  .cell-badge {{ font-size: 0.64rem; font-weight: 800; text-transform: uppercase; padding: 2px 5px; border-radius: 3px; display: inline-block; white-space: nowrap; letter-spacing: 0.02em; }}
-  .badge-open {{ color: var(--text-open); font-size: 0.7rem; }}
-  .badge-booked {{ color: var(--text-booked); font-size: 0.7rem; }}
-  .badge-in {{ background: #0f172a; color: #ffffff; }}
-  .badge-out {{ background: #0f766e; color: #ffffff; }}
-  .badge-turnover {{ background: #d97706; color: #ffffff; font-size: 0.58rem; padding: 2px 4px; }}
 
   .monthly-holidays {{ background: #f8fafc; padding: 12px 18px; font-size: 0.85rem; color: #334155; border-top: 1px solid #cbd5e1; }}
   .holiday-list-title {{ font-weight: 800; margin-bottom: 6px; color: #0f172a; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }}
@@ -1325,12 +1352,10 @@ class CleanerCalendarBuilder:
     .updated-label {{ font-size: 0.65rem; width: 100%; }}
     .weekdays {{ font-size: 0.68rem; padding: 5px 0; }}
     .day-cell {{ min-height: 52px; padding: 3px 2px; }}
+    .day-cell.state-turnover {{ outline-width: 2px; outline-offset: -2px; }}
     .day-top {{ height: 12px; }}
     .holiday-star {{ font-size: 0.72rem; }}
     .day-num {{ font-size: 0.68rem; }}
-    .cell-badge {{ font-size: 0.45rem; padding: 1px 2px; letter-spacing: -0.01em; }}
-    .badge-open, .badge-booked {{ font-size: 0.52rem; }}
-    .badge-turnover {{ font-size: 0.42rem; padding: 1px 2px; }}
     .monthly-holidays {{ padding: 8px 10px; font-size: 0.74rem; }}
     .holiday-list-title {{ font-size: 0.68rem; margin-bottom: 4px; }}
     .holiday-list {{ flex-direction: column; gap: 3px; }}
@@ -1343,7 +1368,7 @@ class CleanerCalendarBuilder:
   <!-- Section A: Upcoming Cleaning Windows -->
   <div class="windows-card">
     <div class="windows-header">
-      <h2 class="windows-title">🧹 Upcoming Cleaning Windows</h2>
+      <h2 class="windows-title">Upcoming Cleaning Windows</h2>
       <span class="windows-sub">Check-Out: 10:00 AM &bull; Check-In: 4:00 PM</span>
     </div>
     <div class="windows-list" id="windowsList"></div>
@@ -1363,7 +1388,7 @@ class CleanerCalendarBuilder:
       <div class="legend-items">
         <span class="legend-pill pill-open">Open (Available to Clean)</span>
         <span class="legend-pill pill-booked">Booked</span>
-        <span class="legend-pill pill-turnover">⚡ Turnover (10a–4p)</span>
+        <span class="legend-pill pill-turnover">Same-Day Turnover</span>
         <span class="pill-holiday">★ US Holiday</span>
       </div>
       <span class="updated-label">Updated: {updated_str}</span>
@@ -1380,6 +1405,7 @@ class CleanerCalendarBuilder:
 <script>
   const rawData = {records_json};
   const upcomingWindows = {windows_json};
+  const holidayCatalog = {holidays_json};
   const dataMap = {{}};
   rawData.forEach(item => {{ dataMap[item.date] = item; }});
 
@@ -1407,7 +1433,7 @@ class CleanerCalendarBuilder:
       if (w.type === "SAME_DAY") {{
         return `
           <div class="window-row urgent">
-            <span class="win-badge urgent">⚡ SAME-DAY TURNOVER</span>
+            <span class="win-badge urgent">SAME-DAY TURNOVER</span>
             <div class="win-details">
               <strong>${{formatShortDate(w.checkout_date)}}</strong> &mdash; Clean between <strong>10:00 AM &ndash; 4:00 PM</strong>
             </div>
@@ -1415,20 +1441,20 @@ class CleanerCalendarBuilder:
           </div>
         `;
       }} else if (w.type === "WINDOW") {{
-        const dayWord = w.gap_days === 1 ? "Day" : "Days";
+        const dayWordPlural = w.gap_days === 1 ? "Day" : "Days";
         return `
           <div class="window-row">
-            <span class="win-badge normal">🧹 ${{w.gap_days}}-${{dayWord.toUpperCase()}} WINDOW</span>
+            <span class="win-badge normal">${{w.gap_days}}-DAY WINDOW</span>
             <div class="win-details">
               <strong>Out:</strong> ${{formatShortDate(w.checkout_date)}} (10:00 AM) &rarr; <strong>Next In:</strong> ${{formatShortDate(w.next_checkin_date)}} (4:00 PM)
             </div>
-            <span class="win-meta">${{w.gap_days}} ${{dayWord}} Available to Clean</span>
+            <span class="win-meta">${{w.gap_days}} ${{dayWordPlural}} Available to Clean</span>
           </div>
         `;
       }} else {{
         return `
           <div class="window-row">
-            <span class="win-badge normal">🧹 OPEN WINDOW</span>
+            <span class="win-badge normal">OPEN WINDOW</span>
             <div class="win-details">
               <strong>Out:</strong> ${{formatShortDate(w.checkout_date)}} (10:00 AM) &rarr; Open calendar afterward
             </div>
@@ -1464,42 +1490,34 @@ class CleanerCalendarBuilder:
       const dd = String(d).padStart(2, '0');
       const dateStr = `${{year}}-${{mm}}-${{dd}}`;
       const info = dataMap[dateStr];
+      const holidayName = (info && info.holiday) ? info.holiday : (holidayCatalog[dateStr] || "");
 
       let starHtml = "";
-      let contentHtml = "";
-
-      if (info && info.holiday) {{
-        starHtml = `<span class="holiday-star" title="${{info.holiday}}">★</span>`;
-        currentMonthHolidays.push({{ day: d, name: info.holiday }});
+      if (holidayName) {{
+        starHtml = `<span class="holiday-star" title="${{holidayName}}">★</span>`;
+        currentMonthHolidays.push({{ day: d, name: holidayName }});
       }}
 
       if (!info) {{
         cell.className = "day-cell empty";
       }} else {{
         cell.className = "day-cell";
-        if (info.is_past) {{
-          cell.classList.add("past-day");
-        }}
-
         if (info.state === "SAME_DAY_TURNOVER") {{
           cell.classList.add("state-turnover");
-          contentHtml = `<div class="day-content"><span class="cell-badge badge-turnover">TURNOVER (10a–4p)</span></div>`;
+        }} else if (info.state === "CHECK_IN_FROM_PAST") {{
+          cell.classList.add("state-checkin-past");
         }} else if (info.state === "CHECK_IN") {{
           cell.classList.add("state-checkin");
-          contentHtml = `<div class="day-content"><span class="cell-badge badge-in">IN 4:00 PM</span></div>`;
         }} else if (info.state === "CHECK_OUT") {{
           cell.classList.add("state-checkout");
-          contentHtml = `<div class="day-content"><span class="cell-badge badge-out">OUT 10:00 AM</span></div>`;
         }} else if (info.state === "BOOKED") {{
           cell.classList.add("state-booked");
-          contentHtml = `<div class="day-content"><span class="cell-badge badge-booked">BOOKED</span></div>`;
         }} else {{
           cell.classList.add("state-open");
-          contentHtml = `<div class="day-content"><span class="cell-badge badge-open">OPEN</span></div>`;
         }}
       }}
 
-      cell.innerHTML = `<div class="day-top">${{starHtml}}<span class="day-num">${{d}}</span></div>${{contentHtml}}`;
+      cell.innerHTML = `<div class="day-top">${{starHtml}}<span class="day-num">${{d}}</span></div>`;
       grid.appendChild(cell);
     }}
 
