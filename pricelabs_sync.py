@@ -10,7 +10,7 @@ for Mammoth Charm LLC. Builds:
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.3 (Hide Prev Button on Current Month + Full Monthly Holidays on All Calendars)
+Version: 4.2.6 (Amber Same-Day Turnover Cell with Grid-Gray Diagonal + Simplified Time Labels)
 """
 
 import os
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.3; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.6; +https://mammothcharm.com)"
         }
 
         try:
@@ -1090,7 +1090,7 @@ class CleanerCalendarBuilder:
     featuring:
       - Section A: Upcoming Cleaning Windows summary list (Next 8 turnovers)
       - Section B: Monthly Turnover Calendar Grid with color-coded cells (no cell text),
-        white cells for past/today, and Pink + Amber Outline + Amber Diagonal for Same-Day Turnovers.
+        white cells for past/today, and Amber Fill + Light Gray Grid Diagonal for Same-Day Turnovers.
     """
 
     def __init__(self, title: str = "Mammoth Charm - Cleaning & Turnover Schedule"):
@@ -1269,8 +1269,10 @@ class CleanerCalendarBuilder:
     --bg-booked: #ffe4e6;
     --border-booked: #fda4af;
     --text-booked: #9f1239;
+    --bg-turnover: #fcd34d;
     --border-turnover: #f59e0b;
-    --text-turnover: #92400e;
+    --text-turnover: #0f172a;
+    --grid-line: #cbd5e1;
     --bg-past: #f8fafc;
     --header-bg: #00c4b3;
     --header-text: #0f172a;
@@ -1285,7 +1287,6 @@ class CleanerCalendarBuilder:
   .windows-card {{ border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
   .windows-header {{ background: #0f172a; color: #ffffff; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }}
   .windows-title {{ font-size: 1.05rem; font-weight: 800; margin: 0; letter-spacing: 0.02em; text-transform: uppercase; }}
-  .windows-sub {{ font-size: 0.78rem; color: #94a3b8; font-weight: 600; }}
   .windows-list {{ padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }}
   .window-row {{ display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; gap: 10px; flex-wrap: wrap; }}
   .window-row.urgent {{ background: #fffbeb; border: 1.5px solid #f59e0b; }}
@@ -1308,12 +1309,12 @@ class CleanerCalendarBuilder:
   .legend-pill {{ display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 4px; font-size: 0.76rem; font-weight: 700; }}
   .pill-open {{ background: var(--bg-open); color: var(--text-open); border: 1px solid var(--border-open); }}
   .pill-booked {{ background: var(--bg-booked); color: #be123c; border: 1px solid var(--border-booked); }}
-  .pill-turnover {{ background: var(--bg-booked); color: var(--text-turnover); border: 2px solid var(--border-turnover); }}
+  .pill-turnover {{ background: var(--bg-turnover); color: var(--text-turnover); border: 1px solid var(--border-turnover); }}
   .pill-holiday {{ background: transparent; color: var(--star-color); font-weight: 800; font-size: 0.8rem; padding: 0 2px; }}
   .updated-label {{ color: #64748b; font-size: 0.74rem; font-weight: 500; }}
 
   .weekdays {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: #f1f5f9; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 700; font-size: 0.8rem; padding: 8px 0; color: #334155; }}
-  .days-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: #cbd5e1; }}
+  .days-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--grid-line); }}
 
   .day-cell {{ min-height: 74px; background: #fff; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; user-select: none; min-width: 0; overflow: hidden; }}
   .day-cell.empty {{ background: var(--bg-past); }}
@@ -1324,18 +1325,17 @@ class CleanerCalendarBuilder:
   .day-cell.state-checkin-past {{ background: linear-gradient(135deg, var(--bg-past) 50%, var(--bg-booked) 50%); }}
   .day-cell.state-checkout {{ background: linear-gradient(135deg, var(--bg-booked) 50%, var(--bg-open) 50%); }}
 
-  /* Same-Day Turnover: Light Pink Background + Solid Amber Outline + Solid Amber Diagonal Line */
+  /* Same-Day Turnover: Solid Amber Fill + No Outline + Light Gray Diagonal Line Matching Grid */
   .day-cell.state-turnover {{
     background: linear-gradient(
       135deg,
-      var(--bg-booked) calc(50% - 1.5px),
-      var(--border-turnover) calc(50% - 1.5px),
-      var(--border-turnover) calc(50% + 1.5px),
-      var(--bg-booked) calc(50% + 1.5px)
+      var(--bg-turnover) calc(50% - 0.75px),
+      var(--grid-line) calc(50% - 0.75px),
+      var(--grid-line) calc(50% + 0.75px),
+      var(--bg-turnover) calc(50% + 0.75px)
     );
-    outline: 2.5px solid var(--border-turnover);
-    outline-offset: -2.5px;
   }}
+  .day-cell.state-turnover .day-num {{ color: #0f172a; font-weight: 800; }}
 
   .day-top {{ display: flex; justify-content: space-between; align-items: flex-start; width: 100%; height: 16px; }}
   .holiday-star {{ font-size: 1rem; color: var(--star-color); line-height: 1; }}
@@ -1349,7 +1349,6 @@ class CleanerCalendarBuilder:
   @media (max-width: 650px) {{
     .windows-header {{ padding: 10px 12px; }}
     .windows-title {{ font-size: 0.92rem; }}
-    .windows-sub {{ font-size: 0.7rem; }}
     .windows-list {{ padding: 10px; gap: 6px; }}
     .window-row {{ padding: 8px 10px; gap: 6px; }}
     .win-badge {{ font-size: 0.64rem; padding: 3px 6px; }}
@@ -1367,7 +1366,6 @@ class CleanerCalendarBuilder:
     .updated-label {{ font-size: 0.65rem; width: 100%; }}
     .weekdays {{ font-size: 0.68rem; padding: 5px 0; }}
     .day-cell {{ min-height: 52px; padding: 3px 2px; }}
-    .day-cell.state-turnover {{ outline-width: 2px; outline-offset: -2px; }}
     .day-top {{ height: 12px; }}
     .holiday-star {{ font-size: 0.72rem; }}
     .day-num {{ font-size: 0.68rem; }}
@@ -1384,7 +1382,6 @@ class CleanerCalendarBuilder:
   <div class="windows-card">
     <div class="windows-header">
       <h2 class="windows-title">Upcoming Cleaning Windows</h2>
-      <span class="windows-sub">Check-Out: 10:00 AM &bull; Check-In: 4:00 PM</span>
     </div>
     <div class="windows-list" id="windowsList"></div>
   </div>
@@ -1401,7 +1398,7 @@ class CleanerCalendarBuilder:
     </div>
     <div class="legend">
       <div class="legend-items">
-        <span class="legend-pill pill-open">Open (Available to Clean)</span>
+        <span class="legend-pill pill-open">Open</span>
         <span class="legend-pill pill-booked">Booked</span>
         <span class="legend-pill pill-turnover">Same-Day Turnover</span>
         <span class="pill-holiday">★ US Holiday</span>
@@ -1453,9 +1450,9 @@ class CleanerCalendarBuilder:
           <div class="window-row urgent">
             <span class="win-badge urgent">SAME-DAY TURNOVER</span>
             <div class="win-details">
-              <strong>${{formatShortDate(w.checkout_date)}}</strong> &mdash; Clean between <strong>10:00 AM &ndash; 4:00 PM</strong>
+              <strong>${{formatShortDate(w.checkout_date)}}</strong> &mdash; Clean between <strong>10 am &ndash; 4 pm</strong>
             </div>
-            <span class="win-meta">Next Guest In Today @ 4:00 PM</span>
+            <span class="win-meta">Guests Check-In at 4 pm</span>
           </div>
         `;
       }} else if (w.type === "WINDOW") {{
@@ -1464,7 +1461,7 @@ class CleanerCalendarBuilder:
           <div class="window-row">
             <span class="win-badge normal">${{w.gap_days}}-DAY WINDOW</span>
             <div class="win-details">
-              <strong>Out:</strong> ${{formatShortDate(w.checkout_date)}} (10:00 AM) &rarr; <strong>Next In:</strong> ${{formatShortDate(w.next_checkin_date)}} (4:00 PM)
+              <strong>Check-Out:</strong> ${{formatShortDate(w.checkout_date)}} at 10 am &rarr; <strong>Check-In:</strong> ${{formatShortDate(w.next_checkin_date)}} at 4 pm
             </div>
             <span class="win-meta">${{w.gap_days}} ${{dayWordPlural}} Available to Clean</span>
           </div>
@@ -1474,7 +1471,7 @@ class CleanerCalendarBuilder:
           <div class="window-row">
             <span class="win-badge normal">OPEN WINDOW</span>
             <div class="win-details">
-              <strong>Out:</strong> ${{formatShortDate(w.checkout_date)}} (10:00 AM) &rarr; Open calendar afterward
+              <strong>Check-Out:</strong> ${{formatShortDate(w.checkout_date)}} at 10 am &rarr; Open calendar afterward
             </div>
             <span class="win-meta">Flexible Clean</span>
           </div>
