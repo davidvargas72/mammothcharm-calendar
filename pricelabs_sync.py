@@ -10,7 +10,7 @@ for Mammoth Charm LLC. Builds:
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.6 (Amber Same-Day Turnover Cell with Grid-Gray Diagonal + Simplified Time Labels)
+Version: 4.2.7 (Soft Pastel Amber Turnover Cell + Warm Amber Diagonal + Standard Date Weight)
 """
 
 import os
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.6; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.7; +https://mammothcharm.com)"
         }
 
         try:
@@ -1090,7 +1090,7 @@ class CleanerCalendarBuilder:
     featuring:
       - Section A: Upcoming Cleaning Windows summary list (Next 8 turnovers)
       - Section B: Monthly Turnover Calendar Grid with color-coded cells (no cell text),
-        white cells for past/today, and Amber Fill + Light Gray Grid Diagonal for Same-Day Turnovers.
+        white cells for past/today, and Soft Pastel Amber + Warm Amber Diagonal for Same-Day Turnovers.
     """
 
     def __init__(self, title: str = "Mammoth Charm - Cleaning & Turnover Schedule"):
@@ -1269,9 +1269,9 @@ class CleanerCalendarBuilder:
     --bg-booked: #ffe4e6;
     --border-booked: #fda4af;
     --text-booked: #9f1239;
-    --bg-turnover: #fcd34d;
+    --bg-turnover: #fef3c7;
     --border-turnover: #f59e0b;
-    --text-turnover: #0f172a;
+    --text-turnover: #92400e;
     --grid-line: #cbd5e1;
     --bg-past: #f8fafc;
     --header-bg: #00c4b3;
@@ -1325,17 +1325,16 @@ class CleanerCalendarBuilder:
   .day-cell.state-checkin-past {{ background: linear-gradient(135deg, var(--bg-past) 50%, var(--bg-booked) 50%); }}
   .day-cell.state-checkout {{ background: linear-gradient(135deg, var(--bg-booked) 50%, var(--bg-open) 50%); }}
 
-  /* Same-Day Turnover: Solid Amber Fill + No Outline + Light Gray Diagonal Line Matching Grid */
+  /* Same-Day Turnover: Soft Pastel Amber Fill + Crisp Warm Amber Diagonal Line */
   .day-cell.state-turnover {{
     background: linear-gradient(
       135deg,
       var(--bg-turnover) calc(50% - 0.75px),
-      var(--grid-line) calc(50% - 0.75px),
-      var(--grid-line) calc(50% + 0.75px),
+      var(--border-turnover) calc(50% - 0.75px),
+      var(--border-turnover) calc(50% + 0.75px),
       var(--bg-turnover) calc(50% + 0.75px)
     );
   }}
-  .day-cell.state-turnover .day-num {{ color: #0f172a; font-weight: 800; }}
 
   .day-top {{ display: flex; justify-content: space-between; align-items: flex-start; width: 100%; height: 16px; }}
   .holiday-star {{ font-size: 1rem; color: var(--star-color); line-height: 1; }}
