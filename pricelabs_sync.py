@@ -10,7 +10,7 @@ for Mammoth Charm LLC. Builds:
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.0 (Added Dedicated Cleaner Turnover Schedule Dashboard - cleaner.html)
+Version: 4.2.1 (Dark Slate Header Bar + White Month Title + Cyan Navigation Buttons)
 """
 
 import os
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.1; +https://mammothcharm.com)"
         }
 
         try:
@@ -500,11 +500,11 @@ class HTMLCalendarBuilder:
   
   .cal-container {{ width: 100%; max-width: 900px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background: #ffffff; }}
   
-  .cal-header {{ display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: var(--header-bg); color: var(--header-text); }}
-  .cal-title {{ font-size: 1.35rem; font-weight: 800; margin: 0; color: var(--header-text); letter-spacing: -0.01em; }}
+  .cal-header {{ display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #0f172a; color: #ffffff; }}
+  .cal-title {{ font-size: 1.35rem; font-weight: 800; margin: 0; color: #ffffff; letter-spacing: -0.01em; }}
   .nav-btns {{ display: flex; gap: 8px; align-items: center; }}
-  .nav-btn {{ background: #0f172a; border: none; color: #ffffff; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.88rem; transition: background 0.15s; white-space: nowrap; }}
-  .nav-btn:hover {{ background: #1e293b; }}
+  .nav-btn {{ background: #00c4b3; border: none; color: #0f172a; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.88rem; transition: background 0.15s; white-space: nowrap; }}
+  .nav-btn:hover {{ background: #00a89a; }}
 
   .legend {{ display: flex; gap: 12px; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; align-items: center; justify-content: space-between; flex-wrap: wrap; }}
   .legend-items {{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }}
@@ -1091,8 +1091,6 @@ class CleanerCalendarBuilder:
         for y in range(today.year, today.year + 3):
             holiday_catalog.update(calculate_us_holidays(y))
 
-        # If Airbnb iCal returned explicit VEVENT blocks, use them to preserve exact check-in/out boundaries.
-        # Otherwise, reconstruct contiguous blocks from raw_booked_dates.
         blocks = list(event_blocks)
         if not blocks and raw_booked_dates:
             sorted_dates = sorted(list(raw_booked_dates))
@@ -1130,7 +1128,6 @@ class CleanerCalendarBuilder:
                 occupied_nights.add(c_obj.strftime("%Y-%m-%d"))
                 c_obj += timedelta(days=1)
 
-        # Build daily records for the monthly calendar grid
         daily_records: List[Dict[str, Any]] = []
         curr = start_window
         while curr <= end_window:
@@ -1159,7 +1156,6 @@ class CleanerCalendarBuilder:
             })
             curr += timedelta(days=1)
 
-        # Build Upcoming Cleaning Windows summary list (next 8 turnovers starting >= today)
         upcoming_windows: List[Dict[str, Any]] = []
         for idx, b in enumerate(blocks):
             co_str = b["end"]
@@ -1167,7 +1163,6 @@ class CleanerCalendarBuilder:
             if co_date < today:
                 continue
 
-            # Find the next check-in on or after this check-out
             next_ci_str = None
             for next_b in blocks[idx + 1:]:
                 if next_b["start"] >= co_str:
@@ -1260,11 +1255,11 @@ class CleanerCalendarBuilder:
 
   /* Section B: Monthly Turnover Calendar Grid */
   .cal-container {{ width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background: #ffffff; }}
-  .cal-header {{ display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: var(--header-bg); color: var(--header-text); }}
-  .cal-title {{ font-size: 1.35rem; font-weight: 800; margin: 0; color: var(--header-text); letter-spacing: -0.01em; }}
+  .cal-header {{ display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #0f172a; color: #ffffff; }}
+  .cal-title {{ font-size: 1.35rem; font-weight: 800; margin: 0; color: #ffffff; letter-spacing: -0.01em; }}
   .nav-btns {{ display: flex; gap: 8px; align-items: center; }}
-  .nav-btn {{ background: #0f172a; border: none; color: #ffffff; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.88rem; transition: background 0.15s; white-space: nowrap; }}
-  .nav-btn:hover {{ background: #1e293b; }}
+  .nav-btn {{ background: #00c4b3; border: none; color: #0f172a; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.88rem; transition: background 0.15s; white-space: nowrap; }}
+  .nav-btn:hover {{ background: #00a89a; }}
 
   .legend {{ display: flex; gap: 10px; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; align-items: center; justify-content: space-between; flex-wrap: wrap; }}
   .legend-items {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
