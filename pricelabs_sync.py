@@ -492,7 +492,7 @@ class HTMLCalendarBuilder:
     --bg-past: #f8fafc;
     --header-bg: #00c4b3;
     --header-text: #0f172a;
-    --star-color: #d97706;
+    --star-color: #0f172a;
   }}
   * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
   
@@ -1259,7 +1259,7 @@ class CleanerCalendarBuilder:
     --bg-past: #f8fafc;
     --header-bg: #00c4b3;
     --header-text: #0f172a;
-    --star-color: #d97706;
+    --star-color: #0f172a;
   }}
   * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
   body {{ margin: 0; padding: 0; background: transparent; color: #1e293b; overflow-x: hidden; width: 100%; }}
