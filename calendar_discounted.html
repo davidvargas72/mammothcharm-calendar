@@ -164,10 +164,10 @@
       <span class="legend-pill pill-unavail">Unavailable</span>
       <span class="pill-holiday">★ US Holiday</span>
     </div>
-    <span class="updated-label">Updated: Oct 22, 2026 at 1:21 pm</span>
+    <span class="updated-label">Updated: Oct 22, 2026 at 1:22 pm</span>
   </div>
   <div class="quote-prompt">
-    <span id="promptText">💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
+    <span id="promptText">Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
     <button class="clear-btn" id="clearBtn" onclick="clearSelection()">Clear Dates</button>
   </div>
   <div class="weekdays">
@@ -269,7 +269,7 @@
       quoteGrid.style.display = "none";
       inquiryForm.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `⚠️ Check-in on ${formatDisplayDate(dateStr)} does not meet the ${reqMin}-night minimum stay requirement because ${formatDisplayDate(windowInfo.firstUnavailableDate)} is already unavailable. Please select an earlier check-in date.`;
+      errorBox.innerText = `Check-in on ${formatDisplayDate(dateStr)} does not meet the ${reqMin}-night minimum stay requirement because ${formatDisplayDate(windowInfo.firstUnavailableDate)} is already unavailable. Please select an earlier check-in date.`;
     } else {
       quoteCard.style.display = "none";
       errorBox.style.display = "none";
@@ -317,7 +317,7 @@
   function clearSelection() {
     checkInDate = null;
     checkOutDate = null;
-    document.getElementById("promptText").innerText = "💡 Click an available Check-In and Check-Out date to calculate your instant stay quote.";
+    document.getElementById("promptText").innerText = "Click an available Check-In and Check-Out date to calculate your instant stay quote.";
     document.getElementById("clearBtn").style.display = "none";
     document.getElementById("quoteCard").style.display = "none";
     document.getElementById("inquiryForm").style.display = "none";
@@ -363,16 +363,16 @@
       status.style.display = "block";
       if (response.status === 200) {
         status.style.color = "#166534";
-        status.innerText = "✓ Booking inquiry sent! We will get back to you within 24 hours.";
+        status.innerText = "Booking inquiry sent. We will get back to you within 24 hours.";
         document.getElementById("inquiryForm").reset();
       } else {
         status.style.color = "#be123c";
-        status.innerText = "⚠️ Error sending request: " + (result.message || "Please try again.");
+        status.innerText = "Error sending request: " + (result.message || "Please try again.");
       }
     } catch (err) {
       status.style.display = "block";
       status.style.color = "#be123c";
-      status.innerText = "⚠️ Network error. Please try again.";
+      status.innerText = "Network error. Please try again.";
     }
     btn.disabled = false;
     btn.innerText = "Send Booking Request";
@@ -422,14 +422,14 @@
     if (hasBlocked) {
       quoteGrid.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = "⚠️ Selected range includes nights that are already unavailable. Please select an open date range.";
+      errorBox.innerText = "Selected range includes nights that are already unavailable. Please select an open date range.";
       return;
     }
 
     if (nights < requiredMinStay) {
       quoteGrid.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `⚠️ Minimum stay starting on ${formatDisplayDate(checkInDate)} is ${requiredMinStay} nights (you selected ${nights} night${nights > 1 ? 's' : ''}).`;
+      errorBox.innerText = `Minimum stay starting on ${formatDisplayDate(checkInDate)} is ${requiredMinStay} nights (you selected ${nights} night${nights > 1 ? 's' : ''}).`;
       return;
     }
 
