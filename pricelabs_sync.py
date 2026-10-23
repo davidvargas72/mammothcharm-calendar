@@ -10,7 +10,7 @@ for Mammoth Charm LLC. Builds:
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.9 (15% Discounted Rate + Cool Light Gray Unavailable Cells on Guest Calendars)
+Version: 4.3.0 (Trailing Empty Grid Cell Padding to Match Leading Empty Cells)
 """
 
 import os
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.9; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.3.0; +https://mammothcharm.com)"
         }
 
         try:
@@ -1074,6 +1074,14 @@ class HTMLCalendarBuilder:
       cell.innerHTML = `<div class="day-top">${{starHtml}}<span class="day-num">${{d}}</span></div>${{contentHtml}}`;
       grid.appendChild(cell);
     }}
+
+    const totalCells = firstDay + daysInMonth;
+    const trailingEmpty = (7 - (totalCells % 7)) % 7;
+    for (let i = 0; i < trailingEmpty; i++) {{
+      const empty = document.createElement("div");
+      empty.className = "day-cell empty";
+      grid.appendChild(empty);
+    }}
     
     const holidayContainer = document.getElementById("monthlyHolidays");
     if (currentMonthHolidays.length > 0) {{
@@ -1567,6 +1575,14 @@ class CleanerCalendarBuilder:
 
       cell.innerHTML = `<div class="day-top">${{starHtml}}<span class="day-num">${{d}}</span></div>`;
       grid.appendChild(cell);
+    }}
+
+    const totalCells = firstDay + daysInMonth;
+    const trailingEmpty = (7 - (totalCells % 7)) % 7;
+    for (let i = 0; i < trailingEmpty; i++) {{
+      const empty = document.createElement("div");
+      empty.className = "day-cell empty";
+      grid.appendChild(empty);
     }}
 
     const holidayContainer = document.getElementById("monthlyHolidays");
