@@ -164,7 +164,7 @@
       <span class="legend-pill pill-unavail">Unavailable</span>
       <span class="pill-holiday">★ US Holiday</span>
     </div>
-    <span class="updated-label">Updated: Oct 22, 2026 at 5:25 pm</span>
+    <span class="updated-label">Updated: Oct 22, 2026 at 6:14 pm</span>
   </div>
   <div class="quote-prompt">
     <span id="promptText">Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
@@ -241,9 +241,10 @@
   }
 
   function getOpenWindowAfter(checkInStr) {
-    if (!checkInStr) return { firstUnavailableDate: null, openNightsCount: 0 };
+    if (!checkInStr || !dataMap[checkInStr]) return { firstUnavailableDate: null, openNightsCount: 0, maxMinStayInWindow: 1 };
     const startObj = parseLocal(checkInStr);
     let openNights = 1;
+    let maxMinStay = parseInt(dataMap[checkInStr].min_stay, 10) || 2;
     for (let i = 1; i <= 365; i++) {
       const curr = new Date(startObj.getFullYear(), startObj.getMonth(), startObj.getDate() + i);
       const y = curr.getFullYear();
@@ -251,29 +252,32 @@
       const d = String(curr.getDate()).padStart(2, '0');
       const dKey = `${y}-${m}-${d}`;
       const dayInfo = dataMap[dKey];
-      if (!dayInfo) return { firstUnavailableDate: null, openNightsCount: openNights };
-      if (!dayInfo.available) return { firstUnavailableDate: dKey, openNightsCount: openNights };
+      if (!dayInfo) return { firstUnavailableDate: null, openNightsCount: openNights, maxMinStayInWindow: maxMinStay };
+      if (!dayInfo.available) return { firstUnavailableDate: dKey, openNightsCount: openNights, maxMinStayInWindow: maxMinStay };
+      const dMin = parseInt(dayInfo.min_stay, 10) || 2;
+      if (dMin > maxMinStay) maxMinStay = dMin;
       openNights++;
     }
-    return { firstUnavailableDate: null, openNightsCount: openNights };
+    return { firstUnavailableDate: null, openNightsCount: openNights, maxMinStayInWindow: maxMinStay };
   }
 
   function validateCheckInSelection(dateStr) {
     const info = dataMap[dateStr];
     const reqMin = parseInt(info.min_stay, 10) || 2;
     const windowInfo = getOpenWindowAfter(dateStr);
+    const effectiveReqMin = Math.max(reqMin, windowInfo.maxMinStayInWindow || reqMin);
 
     const quoteCard = document.getElementById("quoteCard");
     const quoteGrid = document.getElementById("quoteGrid");
     const errorBox = document.getElementById("quoteError");
     const inquiryForm = document.getElementById("inquiryForm");
 
-    if (windowInfo.openNightsCount < reqMin && windowInfo.firstUnavailableDate) {
+    if (windowInfo.openNightsCount < effectiveReqMin && windowInfo.firstUnavailableDate) {
       quoteCard.style.display = "block";
       quoteGrid.style.display = "none";
       inquiryForm.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `Check-in on ${formatDisplayDate(dateStr)} does not meet the ${reqMin}-night minimum stay requirement because ${formatDisplayDate(windowInfo.firstUnavailableDate)} is already unavailable. Please select an earlier check-in date.`;
+      errorBox.innerText = `Check-in on ${formatDisplayDate(dateStr)} does not meet the ${effectiveReqMin}-night minimum stay requirement because ${formatDisplayDate(windowInfo.firstUnavailableDate)} is already unavailable. Please select an earlier check-in date.`;
     } else {
       quoteCard.style.display = "none";
       errorBox.style.display = "none";
@@ -392,7 +396,8 @@
     let hasBlocked = false;
 
     const checkInInfo = dataMap[checkInDate];
-    const requiredMinStay = parseInt(checkInInfo.min_stay, 10) || 1;
+    let requiredMinStay = parseInt(checkInInfo.min_stay, 10) || 1;
+    let maxMinStayDate = checkInDate;
 
     while (curr < endObj) {
       const y = curr.getFullYear();
@@ -404,6 +409,12 @@
       if (!dayData || !dayData.available) {
         hasBlocked = true;
         break;
+      }
+
+      const dayMinStay = parseInt(dayData.min_stay, 10) || 1;
+      if (dayMinStay > requiredMinStay) {
+        requiredMinStay = dayMinStay;
+        maxMinStayDate = dKey;
       }
 
       const price = parseFloat(dayData.price);
@@ -433,7 +444,11 @@
     if (nights < requiredMinStay) {
       quoteGrid.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `Minimum stay starting on ${formatDisplayDate(checkInDate)} is ${requiredMinStay} nights (you selected ${nights} night${nights > 1 ? 's' : ''}).`;
+      if (maxMinStayDate === checkInDate) {
+        errorBox.innerText = `Minimum stay starting on ${formatDisplayDate(checkInDate)} is ${requiredMinStay} nights (you selected ${nights} night${nights > 1 ? 's' : ''}).`;
+      } else {
+        errorBox.innerText = `Minimum stay for your selected dates is ${requiredMinStay} nights because ${formatDisplayDate(maxMinStayDate)} requires a ${requiredMinStay}-night minimum stay (you selected ${nights} night${nights > 1 ? 's' : ''}).`;
+      }
       return;
     }
 
@@ -482,7 +497,8 @@
     if (checkInDate && !checkOutDate && dataMap[checkInDate]) {
       const reqMin = parseInt(dataMap[checkInDate].min_stay, 10) || 2;
       const winInfo = getOpenWindowAfter(checkInDate);
-      if (winInfo.openNightsCount >= reqMin) {
+      const effectiveReqMin = Math.max(reqMin, winInfo.maxMinStayInWindow || reqMin);
+      if (winInfo.openNightsCount >= effectiveReqMin) {
         eligibleTurnaroundDate = winInfo.firstUnavailableDate;
       }
     }
