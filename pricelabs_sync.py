@@ -6,11 +6,11 @@ Automates the extraction of PriceLabs dynamic pricing and minimum stay rules
 PLUS real-time booked/blocked dates directly from Airbnb's iCalendar (.ics) feed
 for Mammoth Charm LLC. Builds:
   1. Two RFC 5545 compliant iCalendar (.ics) feeds
-  2. Two interactive guest HTML monthly calendar grids (Standard & 25% Discounted)
+  2. Two interactive guest HTML monthly calendar grids (Standard & 15% Discounted)
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.8 (Enforce Highest Minimum Stay Across All Nights in Selected Stay Range)
+Version: 4.2.9 (15% Discounted Rate + Cool Light Gray Unavailable Cells on Guest Calendars)
 """
 
 import os
@@ -57,7 +57,7 @@ OUTPUT_DISCOUNTED_HTML = "calendar_discounted.html"
 OUTPUT_CLEANER_HTML = "cleaner.html"
 
 TIMEZONE_STR = "America/Los_Angeles"
-DISCOUNT_MULTIPLIER = 0.75  # 25% reduction
+DISCOUNT_MULTIPLIER = 0.85  # 15% reduction
 CLEANING_FEE = 250          # $250 flat cleaning fee per stay
 
 # Web3Forms Access Key (Delivers directly to davidvargas72@gmail.com)
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.8; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.9; +https://mammothcharm.com)"
         }
 
         try:
@@ -285,7 +285,7 @@ class PriceLabsExtractor:
         - If the window starts at index 0 (immediately touching past/unbookable dates, like Oct 22),
           removes those dates from the bookable list so they render white/unbookable.
         - If the window is between two future booked blocks, marks those dates as available=False
-          so they render light pink (Unavailable).
+          so they render light gray (Unavailable).
         """
         if not records:
             return records
@@ -503,8 +503,8 @@ class HTMLCalendarBuilder:
     --bg-avail: #dcfce7;
     --border-avail: #86efac;
     --text-avail: #166534;
-    --bg-unavail: #ffe4e6;
-    --border-unavail: #fda4af;
+    --bg-unavail: #e2e8f0;
+    --border-unavail: #94a3b8;
     --bg-past: #f8fafc;
     --header-bg: #00c4b3;
     --header-text: #0f172a;
@@ -526,7 +526,7 @@ class HTMLCalendarBuilder:
   .legend-items {{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }}
   .legend-pill {{ display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 700; }}
   .pill-avail {{ background: var(--bg-avail); color: var(--text-avail); border: 1px solid var(--border-avail); }}
-  .pill-unavail {{ background: var(--bg-unavail); color: #be123c; border: 1px solid var(--border-unavail); }}
+  .pill-unavail {{ background: var(--bg-unavail); color: #334155; border: 1px solid var(--border-unavail); }}
   .pill-holiday {{ background: transparent; color: var(--star-color); font-weight: 800; font-size: 0.85rem; padding: 0; }}
   .updated-label {{ color: #64748b; font-size: 0.75rem; font-weight: 500; }}
 
@@ -543,17 +543,17 @@ class HTMLCalendarBuilder:
   .day-cell.avail:hover {{ filter: brightness(0.96); }}
   .day-cell.unavail {{ background: var(--bg-unavail); }}
 
-  /* 1A. Crisp 50/50 Diagonal Split for Start of Booked Block After Available Day (Upper-Left Green / Lower-Right Pink) */
+  /* 1A. Crisp 50/50 Diagonal Split for Start of Booked Block After Available Day (Upper-Left Green / Lower-Right Gray) */
   .day-cell.unavail.turnaround-checkin-booked {{
     background: linear-gradient(135deg, var(--bg-avail) 50%, var(--bg-unavail) 50%);
   }}
 
-  /* 1B. Crisp 50/50 Diagonal Split for Start of Booked Block After Unbookable/White Day (e.g., Oct 23: Upper-Left White / Lower-Right Pink) */
+  /* 1B. Crisp 50/50 Diagonal Split for Start of Booked Block After Unbookable/White Day (e.g., Oct 23: Upper-Left White / Lower-Right Gray) */
   .day-cell.unavail.turnaround-past-booked {{
     background: linear-gradient(135deg, var(--bg-past) 50%, var(--bg-unavail) 50%);
   }}
 
-  /* 2. Crisp 50/50 Diagonal Split for First Available Day After Booked Block (e.g., Nov 17: Upper-Left Pink / Lower-Right Green) */
+  /* 2. Crisp 50/50 Diagonal Split for First Available Day After Booked Block (e.g., Nov 17: Upper-Left Gray / Lower-Right Green) */
   .day-cell.avail.turnaround-checkout-avail {{
     background: linear-gradient(135deg, var(--bg-unavail) 50%, var(--bg-avail) 50%);
   }}
@@ -1632,12 +1632,12 @@ def main():
     with open(OUTPUT_DISCOUNTED_FILENAME, "w", encoding="utf-8") as f:
         f.write(disc_ics)
 
-    # 4. Build Guest HTML Calendars (Standard & 25% Discounted)
+    # 4. Build Guest HTML Calendars (Standard & 15% Discounted)
     std_html_builder = HTMLCalendarBuilder(title="Mammoth Charm - Rates & Availability")
     with open(OUTPUT_STANDARD_HTML, "w", encoding="utf-8") as f:
         f.write(std_html_builder.build_html(standard_records))
 
-    disc_html_builder = HTMLCalendarBuilder(title="Mammoth Charm - Direct Rates (25% Off)")
+    disc_html_builder = HTMLCalendarBuilder(title="Mammoth Charm - Direct Rates (15% Off)")
     with open(OUTPUT_DISCOUNTED_HTML, "w", encoding="utf-8") as f:
         f.write(disc_html_builder.build_html(discounted_records))
 
