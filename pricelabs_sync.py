@@ -10,7 +10,7 @@ for Mammoth Charm LLC. Builds:
   3. One dedicated read-only Cleaner Turnover Schedule dashboard (cleaner.html)
 
 Author: Mammoth Charm LLC Operations
-Version: 4.2.7 (Soft Pastel Amber Turnover Cell + Warm Amber Diagonal + Standard Date Weight)
+Version: 4.2.8 (Enforce Highest Minimum Stay Across All Nights in Selected Stay Range)
 """
 
 import os
@@ -122,7 +122,7 @@ class AirbnbICalExtractor:
             return blocked_dates, event_blocks
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.7; +https://mammothcharm.com)"
+            "User-Agent": "Mozilla/5.0 (compatible; MammothCharmCalendarSync/4.2.8; +https://mammothcharm.com)"
         }
 
         try:
@@ -280,7 +280,8 @@ class PriceLabsExtractor:
     def _apply_orphan_gap_rules(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Guest-facing rule: Detects contiguous available windows where NO date in the window can
-        satisfy its minimum stay requirement before the next unavailable date:
+        satisfy the minimum stay requirement (accounting for the max min_stay of all nights in the stay)
+        before the next unavailable date:
         - If the window starts at index 0 (immediately touching past/unbookable dates, like Oct 22),
           removes those dates from the bookable list so they render white/unbookable.
         - If the window is between two future booked blocks, marks those dates as available=False
@@ -305,12 +306,21 @@ class PriceLabsExtractor:
 
             can_any_book = False
             for k in range(i, j):
-                try:
-                    req_min = int(records[k].get("min_stay", 2))
-                except (ValueError, TypeError):
-                    req_min = 2
                 remaining_open_nights = j - k
-                if remaining_open_nights >= req_min:
+                max_req_min = 1
+                possible_from_k = False
+                for m_idx in range(k, j):
+                    try:
+                        day_min = int(records[m_idx].get("min_stay", 2))
+                    except (ValueError, TypeError):
+                        day_min = 2
+                    if day_min > max_req_min:
+                        max_req_min = day_min
+                    nights_so_far = (m_idx - k) + 1
+                    if nights_so_far >= max_req_min and nights_so_far <= remaining_open_nights:
+                        possible_from_k = True
+                        break
+                if possible_from_k:
                     can_any_book = True
                     break
 
@@ -725,9 +735,10 @@ class HTMLCalendarBuilder:
   }}
 
   function getOpenWindowAfter(checkInStr) {{
-    if (!checkInStr) return {{ firstUnavailableDate: null, openNightsCount: 0 }};
+    if (!checkInStr || !dataMap[checkInStr]) return {{ firstUnavailableDate: null, openNightsCount: 0, maxMinStayInWindow: 1 }};
     const startObj = parseLocal(checkInStr);
     let openNights = 1;
+    let maxMinStay = parseInt(dataMap[checkInStr].min_stay, 10) || 2;
     for (let i = 1; i <= 365; i++) {{
       const curr = new Date(startObj.getFullYear(), startObj.getMonth(), startObj.getDate() + i);
       const y = curr.getFullYear();
@@ -735,29 +746,32 @@ class HTMLCalendarBuilder:
       const d = String(curr.getDate()).padStart(2, '0');
       const dKey = `${{y}}-${{m}}-${{d}}`;
       const dayInfo = dataMap[dKey];
-      if (!dayInfo) return {{ firstUnavailableDate: null, openNightsCount: openNights }};
-      if (!dayInfo.available) return {{ firstUnavailableDate: dKey, openNightsCount: openNights }};
+      if (!dayInfo) return {{ firstUnavailableDate: null, openNightsCount: openNights, maxMinStayInWindow: maxMinStay }};
+      if (!dayInfo.available) return {{ firstUnavailableDate: dKey, openNightsCount: openNights, maxMinStayInWindow: maxMinStay }};
+      const dMin = parseInt(dayInfo.min_stay, 10) || 2;
+      if (dMin > maxMinStay) maxMinStay = dMin;
       openNights++;
     }}
-    return {{ firstUnavailableDate: null, openNightsCount: openNights }};
+    return {{ firstUnavailableDate: null, openNightsCount: openNights, maxMinStayInWindow: maxMinStay }};
   }}
 
   function validateCheckInSelection(dateStr) {{
     const info = dataMap[dateStr];
     const reqMin = parseInt(info.min_stay, 10) || 2;
     const windowInfo = getOpenWindowAfter(dateStr);
+    const effectiveReqMin = Math.max(reqMin, windowInfo.maxMinStayInWindow || reqMin);
 
     const quoteCard = document.getElementById("quoteCard");
     const quoteGrid = document.getElementById("quoteGrid");
     const errorBox = document.getElementById("quoteError");
     const inquiryForm = document.getElementById("inquiryForm");
 
-    if (windowInfo.openNightsCount < reqMin && windowInfo.firstUnavailableDate) {{
+    if (windowInfo.openNightsCount < effectiveReqMin && windowInfo.firstUnavailableDate) {{
       quoteCard.style.display = "block";
       quoteGrid.style.display = "none";
       inquiryForm.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `Check-in on ${{formatDisplayDate(dateStr)}} does not meet the ${{reqMin}}-night minimum stay requirement because ${{formatDisplayDate(windowInfo.firstUnavailableDate)}} is already unavailable. Please select an earlier check-in date.`;
+      errorBox.innerText = `Check-in on ${{formatDisplayDate(dateStr)}} does not meet the ${{effectiveReqMin}}-night minimum stay requirement because ${{formatDisplayDate(windowInfo.firstUnavailableDate)}} is already unavailable. Please select an earlier check-in date.`;
     }} else {{
       quoteCard.style.display = "none";
       errorBox.style.display = "none";
@@ -876,7 +890,8 @@ class HTMLCalendarBuilder:
     let hasBlocked = false;
 
     const checkInInfo = dataMap[checkInDate];
-    const requiredMinStay = parseInt(checkInInfo.min_stay, 10) || 1;
+    let requiredMinStay = parseInt(checkInInfo.min_stay, 10) || 1;
+    let maxMinStayDate = checkInDate;
 
     while (curr < endObj) {{
       const y = curr.getFullYear();
@@ -888,6 +903,12 @@ class HTMLCalendarBuilder:
       if (!dayData || !dayData.available) {{
         hasBlocked = true;
         break;
+      }}
+
+      const dayMinStay = parseInt(dayData.min_stay, 10) || 1;
+      if (dayMinStay > requiredMinStay) {{
+        requiredMinStay = dayMinStay;
+        maxMinStayDate = dKey;
       }}
 
       const price = parseFloat(dayData.price);
@@ -917,7 +938,11 @@ class HTMLCalendarBuilder:
     if (nights < requiredMinStay) {{
       quoteGrid.style.display = "none";
       errorBox.style.display = "block";
-      errorBox.innerText = `Minimum stay starting on ${{formatDisplayDate(checkInDate)}} is ${{requiredMinStay}} nights (you selected ${{nights}} night${{nights > 1 ? 's' : ''}}).`;
+      if (maxMinStayDate === checkInDate) {{
+        errorBox.innerText = `Minimum stay starting on ${{formatDisplayDate(checkInDate)}} is ${{requiredMinStay}} nights (you selected ${{nights}} night${{nights > 1 ? 's' : ''}}).`;
+      }} else {{
+        errorBox.innerText = `Minimum stay for your selected dates is ${{requiredMinStay}} nights because ${{formatDisplayDate(maxMinStayDate)}} requires a ${{requiredMinStay}}-night minimum stay (you selected ${{nights}} night${{nights > 1 ? 's' : ''}}).`;
+      }}
       return;
     }}
 
@@ -966,7 +991,8 @@ class HTMLCalendarBuilder:
     if (checkInDate && !checkOutDate && dataMap[checkInDate]) {{
       const reqMin = parseInt(dataMap[checkInDate].min_stay, 10) || 2;
       const winInfo = getOpenWindowAfter(checkInDate);
-      if (winInfo.openNightsCount >= reqMin) {{
+      const effectiveReqMin = Math.max(reqMin, winInfo.maxMinStayInWindow || reqMin);
+      if (winInfo.openNightsCount >= effectiveReqMin) {{
         eligibleTurnaroundDate = winInfo.firstUnavailableDate;
       }}
     }}
