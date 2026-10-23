@@ -9,8 +9,8 @@
     --bg-avail: #dcfce7;
     --border-avail: #86efac;
     --text-avail: #166534;
-    --bg-unavail: #ffe4e6;
-    --border-unavail: #fda4af;
+    --bg-unavail: #e2e8f0;
+    --border-unavail: #94a3b8;
     --bg-past: #f8fafc;
     --header-bg: #00c4b3;
     --header-text: #0f172a;
@@ -32,7 +32,7 @@
   .legend-items { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .legend-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 700; }
   .pill-avail { background: var(--bg-avail); color: var(--text-avail); border: 1px solid var(--border-avail); }
-  .pill-unavail { background: var(--bg-unavail); color: #be123c; border: 1px solid var(--border-unavail); }
+  .pill-unavail { background: var(--bg-unavail); color: #334155; border: 1px solid var(--border-unavail); }
   .pill-holiday { background: transparent; color: var(--star-color); font-weight: 800; font-size: 0.85rem; padding: 0; }
   .updated-label { color: #64748b; font-size: 0.75rem; font-weight: 500; }
 
@@ -49,17 +49,17 @@
   .day-cell.avail:hover { filter: brightness(0.96); }
   .day-cell.unavail { background: var(--bg-unavail); }
 
-  /* 1A. Crisp 50/50 Diagonal Split for Start of Booked Block After Available Day (Upper-Left Green / Lower-Right Pink) */
+  /* 1A. Crisp 50/50 Diagonal Split for Start of Booked Block After Available Day (Upper-Left Green / Lower-Right Gray) */
   .day-cell.unavail.turnaround-checkin-booked {
     background: linear-gradient(135deg, var(--bg-avail) 50%, var(--bg-unavail) 50%);
   }
 
-  /* 1B. Crisp 50/50 Diagonal Split for Start of Booked Block After Unbookable/White Day (e.g., Oct 23: Upper-Left White / Lower-Right Pink) */
+  /* 1B. Crisp 50/50 Diagonal Split for Start of Booked Block After Unbookable/White Day (e.g., Oct 23: Upper-Left White / Lower-Right Gray) */
   .day-cell.unavail.turnaround-past-booked {
     background: linear-gradient(135deg, var(--bg-past) 50%, var(--bg-unavail) 50%);
   }
 
-  /* 2. Crisp 50/50 Diagonal Split for First Available Day After Booked Block (e.g., Nov 17: Upper-Left Pink / Lower-Right Green) */
+  /* 2. Crisp 50/50 Diagonal Split for First Available Day After Booked Block (e.g., Nov 17: Upper-Left Gray / Lower-Right Green) */
   .day-cell.avail.turnaround-checkout-avail {
     background: linear-gradient(135deg, var(--bg-unavail) 50%, var(--bg-avail) 50%);
   }
@@ -164,7 +164,7 @@
       <span class="legend-pill pill-unavail">Unavailable</span>
       <span class="pill-holiday">★ US Holiday</span>
     </div>
-    <span class="updated-label">Updated: Oct 23, 2026 at 7:29 am</span>
+    <span class="updated-label">Updated: Oct 23, 2026 at 8:21 am</span>
   </div>
   <div class="quote-prompt">
     <span id="promptText">Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
