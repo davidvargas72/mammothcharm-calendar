@@ -164,7 +164,7 @@
       <span class="legend-pill pill-unavail">Unavailable</span>
       <span class="pill-holiday">★ US Holiday</span>
     </div>
-    <span class="updated-label">Updated: Oct 23, 2026 at 8:26 am</span>
+    <span class="updated-label">Updated: Oct 23, 2026 at 8:44 am</span>
   </div>
   <div class="quote-prompt">
     <span id="promptText">Click an available Check-In and Check-Out date to calculate your instant stay quote.</span>
@@ -579,6 +579,14 @@
 
       cell.innerHTML = `<div class="day-top">${starHtml}<span class="day-num">${d}</span></div>${contentHtml}`;
       grid.appendChild(cell);
+    }
+
+    const totalCells = firstDay + daysInMonth;
+    const trailingEmpty = (7 - (totalCells % 7)) % 7;
+    for (let i = 0; i < trailingEmpty; i++) {
+      const empty = document.createElement("div");
+      empty.className = "day-cell empty";
+      grid.appendChild(empty);
     }
     
     const holidayContainer = document.getElementById("monthlyHolidays");
