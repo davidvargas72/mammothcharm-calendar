@@ -144,6 +144,21 @@ URL:https://www.mammothmountain.com/things-to-do/events/unbound-series/rai
  l-jam-1
 END:VEVENT
 BEGIN:VEVENT
+SUMMARY:Far West Masters Camp & Opener
+DTSTART;VALUE=DATE:20261201
+DTEND;VALUE=DATE:20261207
+UID:farwestmasterscampopener-20261201@mikadatasolutions.com
+DESCRIPTION:Event Hours: Dec 1 (8:00 AM) - Dec 6 (4:00 PM)\n\nDetails: Dec
+  1 Tue Far West Masters Camp & Opener Dec 1 / 8:00 AM - Dec 6 / 4:00 PM Ki
+ ck-start the race season at the Masters Race Camp\, followed by the Master
+ s Opener GS. This event is open to the public. Masters Opener\n\nEvent Lin
+ k: https://www.mammothmountain.com/things-to-do/events/race-department/dec
+ -01-masters-camp-and-opener
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/race-department/de
+ c-01-masters-camp-and-opener
+END:VEVENT
+BEGIN:VEVENT
 SUMMARY:Kids Ski Free Week
 DTSTART;VALUE=DATE:20261205
 DTEND;VALUE=DATE:20261212
@@ -730,6 +745,21 @@ DESCRIPTION:Event Hours: 4:00 PM - 4:45 PM\n\nDetails: Mar 4 Thu Sunset Sn
 LOCATION:Mammoth Mountain\, CA
 URL:https://www.mammothmountain.com/things-to-do/events/tamarack-sunset-sn
  owshoe-tours
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:JLA Banked Slalom
+DTSTART;VALUE=DATE:20270305
+DTEND;VALUE=DATE:20270308
+UID:jlabankedslalom-20270305@mikadatasolutions.com
+DESCRIPTION:Event Hours: Mar 5 (8:00 AM) - Mar 7 (4:00 PM)\n\nDetails: Mar
+  5 Fri JLA Banked Slalom Mar 5 / 8:00 AM - Mar 7 / 4:00 PM Celebrate the l
+ ife of snowboard legend Jeff Anderson at the Annual JLA Banked Slalom.  Ma
+ mmoth Mountain and The JLA Project are thrilled to continue to keep his le
+ gacy alive with a fun day of shredding with Jeffy’s friends and family o
+ n the mountain he grew up on. JLA Banked Slalom\n\nEvent Link: https://www
+ .mammothmountain.com/things-to-do/events/jla-banked-slalom
+LOCATION:Mammoth Mountain\, CA
+URL:https://www.mammothmountain.com/things-to-do/events/jla-banked-slalom
 END:VEVENT
 BEGIN:VEVENT
 SUMMARY:Sunset Snowshoe Tour
